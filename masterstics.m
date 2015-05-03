@@ -1,11 +1,12 @@
-function d=masterstics(checkvals,mainfold)
+function masterstics(checkvals,mainfold)
 
 if ~exist('mainfold','var')
     mainfold=pwd;
 end
 
 % run stics?
-yesstics=1;
+yesstics=0;
+
 % filters: 1: 2: 3: 4: 5: non-overlapping
 sticsfilters=[];
 
@@ -49,28 +50,43 @@ maxtau=10;
 
 mpp=.049;
 
-display('Select the movies.')
-[datalist,dataloc,findex]=uigetfile([mainfold filesep '*.nd2;*.tif*;*.bin'],...
-    'Matlab Files','multiselect','on');
-
-if findex==0
-    fprintf('no data selected\n')
-    return
-end
-
-if ~iscell(datalist); datalist={datalist}; end
-for ii=1:numel(datalist); datalist{ii}=[dataloc datalist{ii}]; end
-[dlocs,dnames,dexts]=cellfun(@fileparts,datalist,'uniformoutput',false);
-
-% WRITE BIN FILES FOR ALL MOVIES
-for ii=1:numel(dnames);
-    if strcmp(dexts{ii},'.nd2')||strcmp(dexts{ii},'.tif')||strcmp(dexts{ii},'.tiff')
-        writebin(fullfile(dlocs{ii},[dnames{ii},dexts{ii}]));
+if yesstics==1
+    display('Select the movies.')
+    [datalist,dataloc,findex]=uigetfile([mainfold filesep '*.nd2;*.tif*;*.bin'],...
+        'Matlab Files','multiselect','on');
+    
+    if findex==0
+        fprintf('no data selected\n')
+        return
     end
+    
+    if ~iscell(datalist); datalist={datalist}; end
+    for ii=1:numel(datalist); datalist{ii}=[dataloc datalist{ii}]; end
+    [dlocs,dnames,dexts]=cellfun(@fileparts,datalist,'uniformoutput',false);
+    
+    % WRITE BIN FILES FOR ALL MOVIES
+    for ii=1:numel(dnames);
+        if strcmp(dexts{ii},'.nd2')||strcmp(dexts{ii},'.tif')||strcmp(dexts{ii},'.tiff')
+            writebin(fullfile(dlocs{ii},[dnames{ii},dexts{ii}]));
+        end
+    end
+else
+    fprintf('select the analysis files.\n')
+    [datalist,dataloc,findex]=uigetfile([mainfold filesep '*.mat'],...
+        'Matlab Files','multiselect','on');
+    
+    if findex==0
+        fprintf('no data selected\n')
+        return
+    end
+    
+    if ~iscell(datalist); datalist={datalist}; end
+    for ii=1:numel(datalist); datalist{ii}=[dataloc datalist{ii}]; end
+    [dlocs,dnames,~]=cellfun(@fileparts,datalist,'uniformoutput',false);
 end
 
 % WRITE PHASEMASKS FILE FOR ALL MOVIES
-if phasemasks==1
+if phasemasks==1&&yesstics==1
     display('Select the phase images.')
     [phaselist,phaselistloc,findex]=uigetfile([mainfold filesep...
         '*.nd2;*.tif*;*.bin'],'Matlab Files','multiselect','on');
@@ -116,7 +132,7 @@ if phasemasks==1
         m.phasemask=phasemask;
         m.phaseparams=phaseparams;
     end
-else
+elseif yesstics==1
     for ii=1:numel(dnames)
         [~,~,sz]=bingetframes([fullfile(dlocs{ii},dnames{ii}),'.bin'],1,[]);
         m=matfile([fullfile(dlocs{ii},dnames{ii}),'_analysis.mat'],'Writable',true);
@@ -127,14 +143,22 @@ else
 end
 
 for jj=1:numel(dnames)  % Loop each movie for sticsing
+    if yesstics==0
+        break
+    end
+    
     % Display movie folder counter
-    fprintf(['STICSing this movie: ',dnames{jj},'\n'])
+    fprintf(['This movie: ',dnames{jj},'\n'])
     
     m=matfile([fullfile(dlocs{jj},dnames{jj}),'_analysis.mat'],'Writable',true);
     phmask=m.phasemask;
     ncells=unique(phmask); ncells(ncells==0)=[];
     
     for ii=ncells(:)'
+        if yesstics==0
+            break
+        end
+        
         sphmask=phmask==ii;
         
         roiinds=zeros(sum(double(sphmask(:))),2);
@@ -178,12 +202,12 @@ for jj=1:numel(dnames)  % Loop each movie for sticsing
         
         % use cyldist to find the cell's orientation and length
         [~,p,~,l]=cyldist(roiinds);
-        thet(jj,ii)=atan(p(1)/p(2));
-        leng(jj,ii)=l-phaseparams(1)*2*mpp;
+        thet(ii)=atan(p(1)/p(2));
+        leng(ii)=l-phaseparams(1)*2*mpp;
         
         % fit the series to gaussians
         for kk=1:maxtau
-            pgauss{jj}(ii,kk,:)=gaussfit(timecorr(:,:,kk),156,0,-thet(jj,ii));
+            pgauss(ii,kk,:)=gaussfit(timecorr(:,:,kk),156,0,-thet(ii));
         end
     end
     
@@ -195,14 +219,17 @@ for jj=1:numel(dnames)  % Loop each movie for sticsing
 end
 
 % %% fit the average msd curve
-% for curr_mainFold=1:numel(datalist)
-%     m=matfile([datalist{curr_mainFold}(1:end-4),'_analysis.mat'],'Writable',true);
-%     
-%     msds(:,curr_mainFold)=m.msds;
-%     
-%     %d=msdfit(msds(3,:).^2,...
-% end
+for jj=1:numel(dnames)
+    m=matfile(fullfile(dlocs{jj},dnames{jj}),'Writable',true);
+    
+    pgauss=m.msds;
+    
+    msds{jj}=pgauss(:,[2,3],:).^2*2;
+    
+    
+end
 
+totmsds=cat(1,msds{:});
 end
 
 function [cell_xy,good_cell]=select_cells(PhaseMask)
