@@ -224,7 +224,7 @@ for jj=1:numel(dnames)
     
     pgauss=m.msds;
     
-    msds{jj}=pgauss(:,[2,3],:).^2*2;
+    msds{jj}=pgauss(:,:,[2,3]).^2*2;
     
     
 end
