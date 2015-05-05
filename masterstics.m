@@ -223,13 +223,12 @@ for jj=1:numel(dnames)
     m=matfile(fullfile(dlocs{jj},dnames{jj}),'Writable',true);
     
     pgauss=m.msds;
-    
-    msds{jj}=pgauss(:,[2,3],:).^2*2;
-    
-    
+    msds{jj}=pgauss(:,:,[2,3]).^2*2;
 end
 
-totmsds=cat(1,msds{:});
+totsmcgoats=cat(1,msds{:});
+
+% the ratio of these two msd curves is constant and proportional to 
 end
 
 function [cell_xy,good_cell]=select_cells(PhaseMask)
