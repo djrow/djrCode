@@ -283,7 +283,7 @@ for jj=1:numel(dnames)
 end
 meanmsds=squeeze(mean(cat(1,msds{:})));
 
-inttime=input('enter the integration time in seconds');
+inttime=input('enter the integration time in seconds: ');
 tau=(1:maxtau)*inttime;
 cs=[.5,1];
 for ii=1:2
