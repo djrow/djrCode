@@ -1,14 +1,9 @@
-function masterstics(checkvals,mainfold)
+function output=masterstics(checkvals,mainfold)
 
+output.msdparams=[];
 if ~exist('mainfold','var')
     mainfold=pwd;
 end
-
-% run stics?
-yesstics=0;
-
-% filters: 1: 2: 3: 4: 5: non-overlapping
-sticsfilters=[];
 
 % select cells from phase mask?
 phasemasks=1;
@@ -16,9 +11,29 @@ phasemasks=1;
 % skip the selection of cells from the phase mask
 skipselect=0;
 
+% run stics?
+yesstics=0;
+
+% run gaussian fitting?
+% yesgauss=1;
+
+% filters: 1: 2: 3: 4: 5: non-overlapping
+sticsfilters=[1,2,4];
+
+% which fitting parameters for the correlation gaussian fit?
+% 156 is independently variable amplitude and two widths.
+% with offset 0 and specified rotation angle.
+gfittype=156;
+
 % parameters for phase mask finding. dilate factor, low thresh, high thres,
 % autofill, min area, max area
 phaseparams=[2,0,.9,1,500,1000];
+ppar.dilate_factor=phaseparams(1);
+ppar.low_threshold=phaseparams(2);
+ppar.high_threshold=phaseparams(3);
+ppar.autofill_bool=phaseparams(4);
+ppar.min_area=phaseparams(5);
+ppar.max_area=phaseparams(6);
 
 % Parameters for peak guessing, in the format of [noise size, particle
 % size, Intensity Threshold, H-Max]. usually [1,10,2e3,1e4]
@@ -49,6 +64,7 @@ framerate=100;
 maxtau=10;
 
 mpp=.049;
+% inttime=.04;
 
 if yesstics==1
     display('Select the movies.')
@@ -81,12 +97,12 @@ else
     end
     
     if ~iscell(datalist); datalist={datalist}; end
-    for ii=1:numel(datalist); datalist{ii}=[dataloc datalist{ii}]; end
+    for ii=1:numel(datalist); datalist{ii}=[dataloc datalist{ii}(1:end-13)]; end
     [dlocs,dnames,~]=cellfun(@fileparts,datalist,'uniformoutput',false);
 end
 
 % WRITE PHASEMASKS FILE FOR ALL MOVIES
-if phasemasks==1&&yesstics==1
+if phasemasks==1&&yesstics==1&&checkvals==1
     display('Select the phase images.')
     [phaselist,phaselistloc,findex]=uigetfile([mainfold filesep...
         '*.nd2;*.tif*;*.bin'],'Matlab Files','multiselect','on');
@@ -109,30 +125,44 @@ if phasemasks==1&&yesstics==1
             img=bingetframes(fullfile(plocs{ii},[pnames{ii},pexts{ii}]));
         end
         
-        mnamelist=who(m); mnamelist=mnamelist(:);
-        if any(cellfun(@strcmp,mnamelist,repmat({'phaseparams'},...
-                [numel(mnamelist),1])))
-            phaseparams=m.phaseparams;
-            
-            yn=input(['input new phase image parameters? enter for ''no'', '...
-                'the parameters for ''yes''.\n']);
-        end
-        
-        if exist('yn','var')&&~isempty(yn)
-            phaseparams=yn;
-        end
-        
         fprintf(['phasing file named: ' dnames{ii} '.\n'])
-        phasemask=valley(img(:,:,1),phaseparams,checkvals);
-        
+        counter=0;
+        while counter<2
+            
+            mnamelist=who(m); mnamelist=mnamelist(:);
+            if any(cellfun(@strcmp,mnamelist,repmat({'phaseparams'},...
+                    [numel(mnamelist),1])))&&counter==0
+                phaseparams=m.phaseparams;
+            end
+            
+            if exist('yn','var')&&~isempty(yn)
+                phaseparams=yn;
+            else
+                counter=counter+1;
+            end
+            
+            phasemask=valley(img(:,:,1),phaseparams,checkvals);
+            
+            ppar.dilate_factor=phaseparams(1);
+            ppar.low_threshold=phaseparams(2);
+            ppar.high_threshold=phaseparams(3);
+            ppar.autofill_bool=phaseparams(4);
+            ppar.min_area=phaseparams(5);
+            ppar.max_area=phaseparams(6);
+            
+            display(ppar)
+            yn=input(['input new phase image parameters?\n enter for ''no'', '...
+                'the parameters for ''yes''. \n two sequential ''nos'' means '...
+                'it''s good to go.\n']);
+        end
         if skipselect==0
-            [~,goodcells]=select_cells(phasemask);
+            [~,goodcells]=select_cells(phasemask,img);
             phasemask(logical(-1*(ismember(phasemask,goodcells)-1)))=0;
         end
         m.phasemask=phasemask;
         m.phaseparams=phaseparams;
     end
-elseif yesstics==1
+elseif yesstics==1&&checkvals==1
     for ii=1:numel(dnames)
         [~,~,sz]=bingetframes([fullfile(dlocs{ii},dnames{ii}),'.bin'],1,[]);
         m=matfile([fullfile(dlocs{ii},dnames{ii}),'_analysis.mat'],'Writable',true);
@@ -143,21 +173,22 @@ elseif yesstics==1
 end
 
 for jj=1:numel(dnames)  % Loop each movie for sticsing
+    if checkvals==1
+        return          % no need to run any more code
+    end
     if yesstics==0
-        break
+        break           % continue to the fitting shenanigans
     end
     
     % Display movie folder counter
-    fprintf(['This movie: ',dnames{jj},'\n'])
+    fprintf(['Working on this movie: ',dnames{jj},'\n'])
     
     m=matfile([fullfile(dlocs{jj},dnames{jj}),'_analysis.mat'],'Writable',true);
     phmask=m.phasemask;
     ncells=unique(phmask); ncells(ncells==0)=[];
     
+    timecorrsave=cell(1,numel(ncells));
     for ii=ncells(:)'
-        if yesstics==0
-            break
-        end
         
         sphmask=phmask==ii;
         
@@ -184,13 +215,14 @@ for jj=1:numel(dnames)  % Loop each movie for sticsing
         % number of frames in each subdivision
         binsize=floor(n/nbins);
         
+        fprintf(['cross-correlating cell ', num2str(ii), ' of ' num2str(max(ncells)), '.\n'])
         if nbins>1
             
             timecorr=cell(1,nbins);
             for kk=1:nbins
                 fnums=1+binsize*(kk-1):binsize*kk;
                 v=bingetframes([fullfile(dlocs{jj},dnames{jj}),'.bin'],fnums,roi);
-                timecorr{kk}=stics3(v,sphmask,10,[1,2,4]);
+                timecorr{kk}=stics3(v,sphmask,10,sticsfilters);
             end
             
             timecorr=mean(cat(4,timecorr{:}),4);
@@ -202,36 +234,93 @@ for jj=1:numel(dnames)  % Loop each movie for sticsing
         
         % use cyldist to find the cell's orientation and length
         [~,p,~,l]=cyldist(roiinds);
-        thet(ii)=atan(p(1)/p(2));
+        thet(ii)=-atan(p(1)/p(2));
         leng(ii)=l-phaseparams(1)*2*mpp;
         
-        % fit the series to gaussians
-        for kk=1:maxtau
-            pgauss(ii,kk,:)=gaussfit(timecorr(:,:,kk),156,0,-thet(ii));
-        end
+        timecorrsave{ii}=timecorr;
     end
     
     % WRITE RESULTS TO ANALYSIS FILE
-    m.msds=pgauss;
+    m.tcorr=timecorrsave;
     m.thet=thet;
     m.leng=leng;
     m.sticsfilters=sticsfilters;
 end
 
-% %% fit the average msd curve
-for jj=1:numel(dnames)
-    m=matfile(fullfile(dlocs{jj},dnames{jj}),'Writable',true);
+for ii=1:numel(dnames)                % loop through movies
+    m=matfile([fullfile(dlocs{ii},dnames{ii}),'_analysis.mat'],'Writable',true);
     
-    pgauss=m.msds;
-    msds{jj}=pgauss(:,:,[2,3]).^2*2;
+    tcorr=m.tcorr;
+    thet=m.thet;
+    
+    pgauss=zeros(numel(tcorr),size(tcorr{1},3),numel(num2str(gfittype)));
+    for jj=1:numel(tcorr)             % loop through cells in a movie
+        workingcorr=tcorr{jj};
+        if isempty(workingcorr)
+            continue
+        end
+        for kk=1:size(workingcorr,3)  % loop through time lags
+            [pgauss(jj,kk,:),~,nrmse(jj,kk)]=gaussfit(workingcorr(:,:,kk),gfittype,0,thet(jj));
+        end
+    end
+    
+    m.pgauss=pgauss;
+    m.nrmse=nrmse;
 end
 
-totsmcgoats=cat(1,msds{:});
+%% fit the average msd curve
+fprintf('fitting gaussians.\n')
+msds=cell(1,numel(dnames));
+for jj=1:numel(dnames)
+    m=matfile([fullfile(dlocs{jj},dnames{jj}),'_analysis.mat']);
+    pgauss=m.pgauss;
+    nrmse=m.nrmse;
+    
+    missingcells=all(all(pgauss==0,2),3);
+    pgauss(find(missingcells),:,:)=[];
+    
+    msds{jj}=pgauss(:,:,[2,3]).^2*2*mpp^2;
+end
+meanmsds=squeeze(mean(cat(1,msds{:})));
 
-% the ratio of these two msd curves is constant and proportional to 
+inttime=input('enter the integration time in seconds');
+tau=(1:maxtau)*inttime;
+cs=[.5,1];
+for ii=1:2
+    pstart=[cs(ii),1,.0384];
+    mdl=fitnlm(tau,meanmsds(1:maxtau,ii),@confmodel,pstart);
+    msdparams(ii,:)=abs(mdl.Coefficients{:,1});
+    
+    subplot(1,2,ii)
+    plot(tau,meanmsds(1:maxtau,ii));
+    hold all
+    plot(tau,confmodel(msdparams(ii,:),tau))
+    hold off
 end
 
-function [cell_xy,good_cell]=select_cells(PhaseMask)
+output.msdparams=msdparams;
+end
+
+function z=confmodel(p,x)
+% global camerasd
+d=abs(p(2)); l=p(1);
+tau=x;
+
+summedterm=@(t,d,l,n)1/n^4*exp(-(n*pi/l).^2*d*t);
+
+temp=eps*ones(size(tau));% counter=0;
+for ii=1:2:2*200-1
+    s=summedterm(tau,d,l,ii);
+    if sum(s./temp)<1e-10
+        break
+    end
+    temp=temp+s;
+end
+% display(counter)
+z=l^2/6*(1-96/pi^4*temp)+p(3); %.0384;
+end
+
+function [cell_xy,good_cell]=select_cells(PhaseMask,im)
 
 % Let user click on the phase mask of cell images to decide which cell to
 % analyze subsequently
@@ -248,6 +337,9 @@ function [cell_xy,good_cell]=select_cells(PhaseMask)
 % good_cell: The indices of chosen cells
 
 cell_fig_h=figure;
+subplot(121)
+imshow(im,[])
+subplot(122)
 imshow(PhaseMask~=0,[],'Border','Tight');
 title(sprintf(['Left-click on cells to be analyzed.\n Press ''Enter'' to proceed.\n'...
     ' Or click return without clicking\n on any cell to analyze ALL of them.']))
