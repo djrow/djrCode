@@ -1,4 +1,4 @@
-function [p,p95]=gaussfit(data,usedparameters,plotres,ang)
+function [p,p95,nrmse]=gaussfit(data,usedparameters,plotres,ang)
 % hw=10;
 % data=data(floor(size(data,1)/2-hw)+1:floor(size(data,1)/2+hw)+1,...
 %     floor(size(data,2)/2-hw)+1:floor(size(data,2)/2+hw)+1);
@@ -99,13 +99,14 @@ mdl=fitnlm(reshape(xdata(nonnanvals(:,[1,1])),sum(nonnanvals),[]),...
 
 p=mdl.Coefficients{:,1};
 p95=diff(coefCI(mdl),1,2);
+nrmse=mdl.RMSE/numel(data)/p(1);
 
 if plotres==1
     funval=reshape(fun(p,xdata),size(x));
     startfunval=reshape(fun(pstart,xdata),size(x));
     
     subplot(131); pcolor(data);
-    title('data')    
+    title('data')
     axis image; shading flat
     cl=get(gca,'clim');
     
@@ -117,7 +118,7 @@ if plotres==1
     title('residuals')
     axis image; shading flat
     cl=cl-min(cl)+min(data(:)-funval(:));
-    set(gca,'clim',cl); 
+    set(gca,'clim',cl);
     
     keyboard
 end

@@ -12,9 +12,9 @@ function PhaseMask=valley(f,params,checkvals)
 %% ------------------------------------------------------------------------
 %  User-Defined Parameters:
 %  ------------------------------------------------------------------------
-if checkvals==1
-    c=onCleanup(@()close);
-end
+% if checkvals==1
+%     c=onCleanup(@()close);
+% end
 dilate_factor=params(1); % 0;
 % Change the to zero only if you still have under-segmentation regardless
 % of threshold.
@@ -173,9 +173,8 @@ if checkvals==1;
     imshow(PhaseMask,[])
     subplot(122) 
     imshow(f,[])
-    display('shift-f5 if this doesnt have your cells highlighted')
-    keyboard    
 end
+drawnow
 end
 
 % %-------------------------------------------------------------------------%

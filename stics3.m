@@ -34,7 +34,6 @@ end
 imstack=imstack-mean(imstack(:));
 
 % do all the time correlations
-display('cross-correlating the movie')
 if any(whichfun==4)     % nonoverlapping
     vfft=fft2(imstack,2*vidsize(1)+1,2*vidsize(2)+1);
     
