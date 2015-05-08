@@ -1,14 +1,16 @@
 function writebin(filename,imstack)
-% inputs are strings of the full location (with filename and extension) of
-% an nd2 file. in that location a file with the video data
-% will be saved as a bin file with the same name. memalloc is the maximum
+% input is a string of the full location (with filename and extension) of
+% an nd2 file. in that location a file with the video data will be saved
+% as a bin file with the same name. memalloc is the maximum
 % number of megabytes of system memory in megabytes that you want to use.
 % default is 100.
 %
 % use vid=bingetframes(saveloc,frames,roi); to get a particular selection
 % of frames out of the saved binary file.
 %
-% if filename is an array of images, then it just writes that to a bin file
+% to write an array in the workspace to a binary file, use two inputs,
+% where the first one is the location and the second one is the movie
+% variable name.
 
 %% write a preloaded data matrix to the hard drive
 if nargin>1
