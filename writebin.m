@@ -1,4 +1,4 @@
-function writebin(filename,imstack,appendflag)
+function writebin(filename,imstack)
 % inputs are strings of the full location (with filename and extension) of
 % an nd2 file. in that location a file with the video data
 % will be saved as a bin file with the same name. memalloc is the maximum
@@ -12,20 +12,8 @@ function writebin(filename,imstack,appendflag)
 
 %% write a preloaded data matrix to the hard drive
 if nargin>1
-    if exist('appendflag','var')&&appendflag==1
-        fid=fopen(filename,'a');
-        
-        fseek(fid,-8,'eof');
-        nprevious=fread(fid,1,'double');
-        
-        if nprevious<1
-            nprevious=0;
-        end
-        
-        fseek(fid,-32,'eof');
-    else
-        fid=fopen(filename,'W');
-    end
+
+    fid=fopen(filename,'W');
     
     msize=size(imstack);
     for ii=1:msize(3)

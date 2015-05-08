@@ -1,38 +1,25 @@
-function masterfit(mainfold,checkvals)
-% mainfold should have nd2 files. if there are phasemask tiff files, they
-% should correspond 1:1 with the nd2 files.
-% the outputs written to disk are a 2Dtracks.fig, fits.fig, analysis.mat, 
-% and a binary version of the nd2 movie.
+function masterfit2(mainfold,checkvals,name)
+% mainfold should have nd2 files or tiff stacks. if there are phasemask tiff
+% files, they should correspond 1:1 with the nd2 files. the outputs written
+% to disk are a 2Dtracks.fig, fits.fig, _analysis.mat, and a binary version
+% of the nd2 (or tiff stack) movie.
 %
-% tableid is either 'north' or 'center'. the north camera software outputs
-% tif stacks and the entire frame of the movie is used in data processing.
-% the center camera outputs nd2 files and commonly phase images of the 
-% sample are recorded as well as tif files.
-% 
-% if your tableid is 'center', and you have a calibdata.mat file from 
-% Z_calibrate_astig2, then there is also a 3Dtracks.fig.
-%
-% inside the analysis.mat file, there are the good fits, the tracked
+% inside the _analysis.mat file, there are the good fits, the tracked
 % particles, the guessed particle positions, and a human-readable output
 %
-% if viewfits_mv is set to a non-zero value, some or all of the movies will
-% be saved as mp4, with the fitted particles outlined in boxes.
-%
-% there are some other self explanatory options in the user-defined
-% parameters section
+% there are various usage settings below.
 
 %% ------------------------------------------------------------------------
 %  User-Defined Parameters
 %  ------------------------------------------------------------------------
 origdir=pwd;
 cd(mainfold)
-
 % run peak fitting in parallel. set this to 0 if you need to fix the peak
-% guessing or fitting parameters. 
+% guessing or fitting parameters.
 % checkvals=0;
 
 % run fitting?
-yesfitting=1;
+yesfitting=0;
 
 % run tracking?
 yestracking=1;
@@ -41,21 +28,33 @@ yestracking=1;
 yesselectcells=0;
 
 % run 3d code?
-yes3d=1;
+yes3d=0;
 
 % make pov-ray csv files?
 yespovray=0;
+
+% remove activation?
+removeactivation=0;
+
+% background subtract? subwidth must be an integer
+bgroundsub=0;
+subwidth=50;
+offset=1000;
 
 % Input which movie(s) will generate the ViewFits frames that are useful
 % for checking guessing/fitting parameters. Use "0" if you do not want any
 % movie to output the ViewFits frames. Use "inf" if you want all movies to
 % generate ViewFits frames. Example, 'viewfits = [1 3]' will tell the code
 % to output ViewFits frames for the 1st and the 3rd movie.
-viewfits_mv=inf;
+viewfits_mv=0;
+
+% parameters for phase mask finding. dilate factor, low thresh, high thres,
+% autofill, min area, max area
+phaseparams=[1,0,2,0,100,10000];
 
 % Parameters for peak guessing, in the format of [noise size, particle
-% size, Intensity, Threshold, H-Max]. usually [1,10,2e3,1e4]
-peak_guessing_params=[1,10,1e3,5e3];
+% size, Intensity Threshold, H-Max]. usually [1,10,2e3,1e4]
+peak_guessing_params=[1,10,200,10];
 
 % Minimal separation of peaks (px). Putative peaks that are closer than
 % this value will be discarded unless it is the brightest one compared to
@@ -75,6 +74,9 @@ width_error_ub=5;
 % Pixel size in nm.
 pxsize=49;
 
+% camera capture rate in 1/s
+framerate=25;
+
 % The maximum allowable separation (nm) of an input width pair and the 2
 % defocusing calibration curves. Fits falling too far from the calibration
 % curve will be rejected, have NaN for the z-center value and will not show
@@ -90,8 +92,9 @@ indRefr_corr=0.79;
 timedelay=0; % Time delay between consecutive frames (ms)
 itgtime=40; % Integration time (ms)
 min_merit=0.1;
-alpha=0.15;
-gamma=1.15;
+max_step_size=10;
+alpha=-log(min_merit)/max_step_size;
+gamma=3;
 min_tr_length=5;
 speed_boxcar_halfsize=1;
 
@@ -111,47 +114,95 @@ if yes3d==1
     end
 end
 
-datalist=uigetfile(cat(1,{'*.nd2'},{'*.tif*'},{'*.bin'}),'multiselect','on');
-phaselist=uigetfile(cat(1,{'*.tif*'},{'*.nd2'},{'*.bin'}),'multiselect','on');
-
+if nargin<3
+    datalist=uigetfile(cat(1,{'*.nd2'},{'*.tif*'},{'*.bin'}),'multiselect','on');
+else
+    datalist={name};
+end
 if ~iscell(datalist)
     if datalist==0
         fprintf('no data selected\n')
         return
     end
-    datalist2={datalist};
-    datalist=datalist2;
-    clear datalist2
-end
-if ~iscell(phaselist)
-    phaselist2={phaselist};
-    phaselist=phaselist2;
-    clear phaselist2;
+    datalist={datalist};
 end
 
 % WRITE BIN FILES FOR ALL MOVIES
-for ii=1:numel(datalist);
-    if numel(dir([datalist{ii}(1:end-4) '.bin']))==0
-        writebin(datalist(ii).name);
+if nargin<3
+    for ii=1:numel(datalist);
+        if numel(dir([datalist{ii}(1:end-4) '.bin']))==0
+            writebin(datalist{ii});
+        end
     end
 end
-    
+
+% WRITE BACKGROUND SUBTRACTED BINARY FILE
+if bgroundsub==1
+    for ii=1:numel(datalist);
+        if numel(dir([datalist{ii}(1:end-4) '_bgsub.bin']))==0
+            fid=fopen([datalist{ii}(1:end-4) '_bgsub.bin'],'W');
+            [~,nframes,sz]=bingetframes([datalist{ii}(1:end-4) '.bin'],1,[]);
+            
+            h1=waitbar(0,['writing bg sub frames for ' datalist{ii}(1:end-4)]);
+            for jj=1:floor(nframes/subwidth)
+                waitbar(jj/floor(nframes/subwidth),h1)
+                if jj~=floor(nframes/subwidth)
+                    v=bingetframes([datalist{ii}(1:end-4) '.bin'],1+subwidth*(jj-1):subwidth*jj,[]);
+                else
+                    v=bingetframes([datalist{ii}(1:end-4) '.bin'],1+subwidth*(jj-1):nframes,[]);
+                end
+                
+                fwrite(fid,uint16(bsxfun(@plus,double(v),-mean(v,3))+offset),'uint16');
+            end
+            fwrite(fid,sz,'double');
+            fwrite(fid,nframes,'double');
+            
+            fclose(fid);
+        end
+    end
+    if exist('h1','var')
+        if ishandle(h1)
+            close(h1)
+        end
+    end
+end
 
 % WRITE PHASEMASKS FILE FOR ALL MOVIES
-if iscell(phaselist)
+if yesselectcells==1
+    [phaselistname,phaselistloc]=uigetfile(cat(1,{'*.tif*'},{'*.nd2'},{'*.bin'}),'multiselect','on');
+    
+    if ~iscell(phaselistname)
+        phaselist2={phaselistname};
+        phaselistname=phaselist2;
+        clear phaselist2;
+    end
+    phaselistloc={phaselistloc};
+    phaselist=cellfun(@(x,y)[x,y],phaselistloc(ones(1,numel(phaselistname))),phaselistname,'uniformoutput',0);
+    
     for ii=1:numel(datalist)
         m=matfile([datalist{ii}(1:end-4),'_analysis.mat'],'Writable',true);
+        
         mnamelist=who(m); mnamelist=mnamelist(:);
-        if any(cellfun(@strcmp,mnamelist,repmat({'phasemask'},...
-                [numel(mnamelist),1])))==0
-            img=imread(phaselist{ii},'tif');
-            phasemask=valley(img(:,:,1));
-            if yesselectcells==1
-                [~,goodcells]=select_cells(phasemask);
-                phasemask(logical(-1*(ismember(phasemask,goodcells)-1)))=0;
-            end
-            m.phasemask=phasemask;
+        if any(cellfun(@strcmp,mnamelist,repmat({'phaseparams'},...
+                [numel(mnamelist),1])))
+            phaseparams=m.phaseparams;
+            
+            yn=input(['input new phase image parameters? enter for ''no'', '...
+                'the parameters for ''yes''.\n']);
         end
+        
+        if exist('yn','var')&&~isempty(yn)
+            phaseparams=yn;
+        end
+        
+        img=imread(phaselist{ii},'tif');
+        phasemask=valley(img(:,:,1),phaseparams,checkvals);
+        if yesselectcells==1
+            [~,goodcells]=select_cells(phasemask);
+            phasemask(logical(-1*(ismember(phasemask,goodcells)-1)))=0;
+        end
+        m.phasemask=phasemask;
+        m.phaseparams=phaseparams;
     end
 else
     for ii=1:numel(datalist)
@@ -179,143 +230,184 @@ for curr_mainFold=1:numel(datalist)  % Loop each movie for guessing/fitting/trac
     mnamelist=who(m); mnamelist=mnamelist(:);
     
     %% psf fitting
-    goodfitdata={[]}; guesses=cell(1,num_files); 
+    goodfitdata={[]}; guesses=cell(1,num_files);
     phasemask=m.phasemask;
+    
+    skippedframes={};
     if any(cellfun(@strcmp,mnamelist,repmat({'goodfitdata'},...
             [numel(mnamelist),1])))==0||yesfitting==1
         if checkvals==1
             frameskip=0;
             h1=waitbar(0,'fittin stuff');
+            
+            if any(cellfun(@strcmp,mnamelist,repmat({'peak_guessing_params'},...
+                    [numel(mnamelist),1])))
+                peak_guessing_params=m.peak_guessing_params;
+                
+                yn=input(['input new peak guessing parameters? enter for ''no'', '...
+                    'the parameters for ''yes''.\n']);
+            end
+            
+            if exist('yn','var')&&~isempty(yn)
+                peak_guessing_params=yn;
+            end
+            
             for ii=1:num_files; % Loop through each frame of the current movie
+                
                 if rem(ii,50)==0
                     waitbar(ii/num_files,h1)
                 end
-                % Read the current frame
-                thisframe=bingetframes([datalist{curr_mainFold}(1:end-4),...
-                    '.bin'],ii,[]);
-                
-                % 3D Peak Fitting and z-position extraction -------------------
-                
-                % Fit putative peaks. peak guessing is in fit_asym_gauss_int2
-                [all_fitparam,all_fiterr,guesses{ii},frameskip]=fit_asym_gauss_int2(thisframe,...
-                    phasemask,2,peak_guessing_params,min_sep,frameskip,ii);
-                
-                Wx=all_fitparam(:,3)*pxsize; Wy=all_fitparam(:,6)*pxsize;
-                
-                if yes3d==1
-                    % Find the z-location (the output is converted to pixels here).
-                    z_nm=find_astigZ_position2(Wx,Wy,defocusing_param,...
-                        max_allowed_D,indRefr_corr);
-                    z_px=z_nm/pxsize;
+                if frameskip<=ii
+                    % Read the current frame
+                    [thisframe,~,~,tval]=bingetframes(...
+                        [datalist{curr_mainFold}(1:end-4) '.bin'],ii,[]);
+                    if removeactivation==1
+                        if sum(sum(thisframe))>tval
+                            skippedframes{ii}=1;
+                            continue
+                        end
+                    else
+                        skippedframes{ii}=nan;
+                    end
                     
-                    % Find the localization uncertainty associated with each z-position using a
-                    % lookup table generated from calibration.
-                    % z_uncertainty_nm = find_z_uncertainty_from_LUT(z_nm', z_std_LUT);
-                    % interp1 replaces the Yi-code find_z_uncertainty_from_LUT
+                    % 3D Peak Fitting and z-position extraction -------------------
                     
-                    z_uncertainty_nm=interp1(z_std_LUT(1,:),z_std_LUT(2,:),z_nm);
-                    z_uncertainty_px=z_uncertainty_nm/pxsize;
-                else
-                    z_px=0;
-                    z_uncertainty_px=0;
-                end
-                
-                % Organize raw fit data ---------------------------------------
-                
-                % Get rid of fits (along with their z-positions) which have their x- and
-                % y-positions lying outside the image
-                valid_param_rows=find(all_fitparam(:,4)>=0&all_fitparam(:,5)>=0&...
-                    all_fitparam(:,4)<=size(phasemask,2)&...
-                    all_fitparam(:,5)<=size(phasemask,1));
-                
-                all_fitparam=all_fitparam(valid_param_rows,:);
-                all_fiterr=all_fiterr(valid_param_rows,:);
-                
-                % # of total fits from current frame (good or bad)
-                numfits=size(all_fitparam,1);
-                
-                if numfits~=0
-                    raw_fitdata=[repmat(ii,[numfits,1]),(1:numfits)',... % col 1,2
-                        all_fitparam(:,1),all_fiterr(:,1),all_fitparam(:,2),... % 3,4,5
-                        all_fiterr(:,2),all_fitparam(:,3),all_fiterr(:,3),... % 6,7,8
-                        all_fitparam(:,4),all_fiterr(:,4),all_fitparam(:,5),... % 9,10,11
-                        all_fiterr(:,5),nan(numfits,1),all_fitparam(:,7),... % 12,13,14
-                        repmat(min_sep*2+1,[numfits, 1]),all_fitparam(:, 6),... % 15,16
-                        all_fiterr(:,6),all_fitparam(:,3)./all_fitparam(:,6),... % 17,18
-                        z_px(valid_param_rows),z_uncertainty_px(valid_param_rows),... % 19,20
-                        phasemask(sub2ind(size(phasemask),... % 21
-                        round(all_fitparam(:,5)),round(all_fitparam(:,4)))),... % 21 cont.
-                        repmat(sROI,[numfits,1]),repmat(tROI,[numfits,1])];  % 22, 23
-                    % Organize fitting data. Here, each column stores the following
-                    % information:  (1) frame # (2) molecule # (3) amplitude (4) amplitude
-                    % error (5) offset (6) offset error (7) x-width (8) x-width error (9)
-                    % x-center (10) x-center error (11) y-center (12) y-center error (13) good
-                    % fit? (NaN, TBD) (14) integral (15) small box width (16) y-width (17)
-                    % y-width error (18) aspect ratio (x width/y width) (19) z-center
-                    % (20) z-center error uncertainty (21) cell # (22) sROI (23) tROI
                     
-                    % good fits based on the following
-                    % criterion: (1) Amplitude > Offset, (2) X- and Y-widths both larger than
-                    % their respective statistical errors, (3) Statistical errors of X- and
-                    % Y-widths are both smaller than a predefined value (4) X- and Y-widths are
-                    % both within a preset range (not too narrow or too wide), (5) Aspect ratio
-                    % is within a preset range, (6) Fits lie within the cell boundaries as
-                    % defined by the phase mask and (7) Z-position is not NaN (i.e., fit widths
-                    % lie close to the defocusing calibration curve)
+                    % Fit putative peaks. peak guessing is in fit_asym_gauss_int2
+                    [all_fitparam,all_fiterr,guesses{ii},frameskip]=fit_asym_gauss_int2(thisframe,...
+                        phasemask,2,peak_guessing_params,min_sep,frameskip,ii);
                     
-                    raw_fitdata(:,13)=(raw_fitdata(:,3)>raw_fitdata(:,5)).*... % Amplitude > offset
-                        (raw_fitdata(:,7)>raw_fitdata(:,8)).*... % x location bigger than x location error
-                        (raw_fitdata(:,16)>raw_fitdata(:,17)).*... % width > error
-                        (raw_fitdata(:,8)<width_error_ub).*...
-                        (raw_fitdata(:,17)<width_error_ub).*... % Width error < UB
-                        (raw_fitdata(:,7)>width_lb).*...
-                        (raw_fitdata(:,7)<width_ub).*... % LB < x-width < UB
-                        (raw_fitdata(:,16)>width_lb).*...
-                        (raw_fitdata(:,16)<width_ub).*... % LB < y-width < UB
-                        (raw_fitdata(:,18)<aspect_ratio_ub).*... % aspect ratio (Wx / Wy) < UB
-                        ((1./raw_fitdata(:,18))<aspect_ratio_ub).*... % aspect ratio (Wy / Wx) < UB
-                        logical(raw_fitdata(:,21)).*... % Within cell boundaries
-                        ~isnan(raw_fitdata(:,19));  % Non-NaN z-position
+                    Wx=all_fitparam(:,3)*pxsize; Wy=all_fitparam(:,6)*pxsize;
                     
-                    goodfitdata{ii}=raw_fitdata(raw_fitdata(:,13)==1,:);
+                    if yes3d==1
+                        % Find the z-location (the output is converted to pixels here).
+                        z_nm=find_astigZ_position2(Wx,Wy,defocusing_param,...
+                            max_allowed_D,indRefr_corr);
+                        z_px=z_nm/pxsize;
+                        
+                        % Find the localization uncertainty associated with each z-position using a
+                        % lookup table generated from calibration.
+                        % z_uncertainty_nm = find_z_uncertainty_from_LUT(z_nm', z_std_LUT);
+                        % interp1 replaces the Yi-code find_z_uncertainty_from_LUT
+                        
+                        z_uncertainty_nm=interp1(z_std_LUT(1,:),z_std_LUT(2,:),z_nm);
+                        z_uncertainty_px=z_uncertainty_nm/pxsize;
+                    else
+                        z_px=zeros(size(all_fitparam,1),1);
+                        z_uncertainty_px=zeros(size(all_fitparam,1),1);
+                    end
+                    
+                    % Organize raw fit data ---------------------------------------
+                    
+                    % Get rid of fits (along with their z-positions) which have their x- and
+                    % y-positions lying outside the image
+                    valid_param_rows=find(all_fitparam(:,4)>=0&all_fitparam(:,5)>=0&...
+                        all_fitparam(:,4)<=size(phasemask,2)&...
+                        all_fitparam(:,5)<=size(phasemask,1));
+                    
+                    all_fitparam=all_fitparam(valid_param_rows,:);
+                    all_fiterr=all_fiterr(valid_param_rows,:);
+                    
+                    % # of total fits from current frame (good or bad)
+                    numfits=size(all_fitparam,1);
+                    
+                    if numfits~=0
+                        raw_fitdata=[repmat(ii,[numfits,1]),(1:numfits)',... % col 1,2
+                            all_fitparam(:,1),all_fiterr(:,1),all_fitparam(:,2),... % 3,4,5
+                            all_fiterr(:,2),all_fitparam(:,3),all_fiterr(:,3),... % 6,7,8
+                            all_fitparam(:,4),all_fiterr(:,4),all_fitparam(:,5),... % 9,10,11
+                            all_fiterr(:,5),nan(numfits,1),all_fitparam(:,7),... % 12,13,14
+                            repmat(min_sep*2+1,[numfits, 1]),all_fitparam(:, 6),... % 15,16
+                            all_fiterr(:,6),all_fitparam(:,3)./all_fitparam(:,6),... % 17,18
+                            z_px(valid_param_rows),z_uncertainty_px(valid_param_rows),... % 19,20
+                            phasemask(sub2ind(size(phasemask),... % 21
+                            ceil(all_fitparam(:,5)),ceil(all_fitparam(:,4)))),... % 21 cont.
+                            repmat(sROI,[numfits,1]),repmat(tROI,[numfits,1])];  % 22, 23
+                        % Organize fitting data. Here, each column stores the following
+                        % information:  (1) frame # (2) molecule # (3) amplitude (4) amplitude
+                        % error (5) offset (6) offset error (7) x-width (8) x-width error (9)
+                        % x-center (10) x-center error (11) y-center (12) y-center error (13) good
+                        % fit? (NaN, TBD) (14) integral (15) small box width (16) y-width (17)
+                        % y-width error (18) aspect ratio (x width/y width) (19) z-center
+                        % (20) z-center error uncertainty (21) cell # (22) sROI (23) tROI
+                        
+                        % good fits based on the following
+                        % criterion: (1) Amplitude > Offset, (2) X- and Y-widths both larger than
+                        % their respective statistical errors, (3) Statistical errors of X- and
+                        % Y-widths are both smaller than a predefined value (4) X- and Y-widths are
+                        % both within a preset range (not too narrow or too wide), (5) Aspect ratio
+                        % is within a preset range, (6) Fits lie within the cell boundaries as
+                        % defined by the phase mask and (7) Z-position is not NaN (i.e., fit widths
+                        % lie close to the defocusing calibration curve)
+                        
+                        raw_fitdata(:,13)=(raw_fitdata(:,3)>0).*... % Amplitude > amp error
+                            (raw_fitdata(:,16)>raw_fitdata(:,17)).*... % width > error
+                            (raw_fitdata(:,8)<width_error_ub).*...
+                            (raw_fitdata(:,17)<width_error_ub).*... % Width error < UB
+                            (raw_fitdata(:,7)>width_lb).*...
+                            (raw_fitdata(:,7)<width_ub).*... % LB < x-width < UB
+                            (raw_fitdata(:,16)>width_lb).*...
+                            (raw_fitdata(:,16)<width_ub).*... % LB < y-width < UB
+                            (raw_fitdata(:,18)<aspect_ratio_ub).*... % aspect ratio (Wx / Wy) < UB
+                            ((1./raw_fitdata(:,18))<aspect_ratio_ub).*... % aspect ratio (Wy / Wx) < UB
+                            logical(raw_fitdata(:,21)).*... % Within cell boundaries
+                            ~isnan(raw_fitdata(:,19));  % Non-NaN z-position
+                        
+                        goodfitdata{ii}=raw_fitdata(raw_fitdata(:,13)==1,:);
+                    end
                 end
             end
             if ishandle(h1)
-                    close(h1)
+                close(h1)
             end
+            
+            m.peak_guessing_params=peak_guessing_params;
         elseif checkvals==0
             % parallel processing. cannot be used for debugging or
             % changing guessing/fitting parameters. this is identical to
-            % the for loop above, except there're no comments so as to save
-            % space
+            % the for loop above, except there're no comments to save space
             if yes3d==0
                 defocusing_param=[]; % because parfor is weird
                 z_std_LUT=[];
             end
             
+            if any(cellfun(@strcmp,mnamelist,repmat({'peak_guessing_params'},...
+                    [numel(mnamelist),1])))
+                peak_guessing_params=m.peak_guessing_params;
+                
+            end
+            
             parfor_progress(num_files); % get this m-file
             parfor ii=1:num_files
                 parfor_progress;
-                % Read the current frame
-                thisframe=bingetframes([datalist{curr_mainFold}(1:end-4),...
-                    '.bin'],ii,[]);
+                
+                [thisframe,~,~,tval]=bingetframes(...
+                    [datalist{curr_mainFold}(1:end-4) '.bin'],ii,[]);
+                if removeactivation==1
+                    if sum(sum(thisframe))>tval
+                        skippedframes{ii}=1;
+                        continue
+                    end
+                else
+                    skippedframes{ii}=nan;
+                end
                 [all_fitparam,all_fiterr,guesses{ii}]=fit_asym_gauss_int2(thisframe,...
-                    phasemask,2,peak_guessing_params,min_sep,checkvals);
+                    phasemask,2,peak_guessing_params,min_sep);
                 Wx=all_fitparam(:,3)*pxsize; Wy=all_fitparam(:,6)*pxsize;
                 if yes3d==1
+                    % Find the z-location (the output is converted to pixels here).
                     z_nm=find_astigZ_position2(Wx,Wy,defocusing_param,...
                         max_allowed_D,indRefr_corr);
                     z_px=z_nm/pxsize;
                     z_uncertainty_nm=interp1(z_std_LUT(1,:),z_std_LUT(2,:),z_nm);
                     z_uncertainty_px=z_uncertainty_nm/pxsize;
                 else
-                    z_px=0;
-                    z_uncertainty_px=0;
+                    z_px=zeros(size(all_fitparam,1),1);
+                    z_uncertainty_px=zeros(size(all_fitparam,1),1);
                 end
                 valid_param_rows=find(all_fitparam(:,4)>=0&all_fitparam(:,5)>=0&...
                     all_fitparam(:,4)<=size(phasemask,2)&...
                     all_fitparam(:,5)<=size(phasemask,1));
-                
                 all_fitparam=all_fitparam(valid_param_rows,:);
                 all_fiterr=all_fiterr(valid_param_rows,:);
                 numfits=size(all_fitparam,1);
@@ -329,10 +421,9 @@ for curr_mainFold=1:numel(datalist)  % Loop each movie for guessing/fitting/trac
                         all_fiterr(:,6),all_fitparam(:,3)./all_fitparam(:,6),... % 17,18
                         z_px(valid_param_rows),z_uncertainty_px(valid_param_rows),... % 19,20
                         phasemask(sub2ind(size(phasemask),... % 21
-                        round(all_fitparam(:,5)),round(all_fitparam(:,4)))),... % 21 cont.
+                        ceil(all_fitparam(:,5)),ceil(all_fitparam(:,4)))),... % 21 cont.
                         repmat(sROI,[numfits,1]),repmat(tROI,[numfits,1])];  % 22, 23
-                    raw_fitdata(:,13)=(raw_fitdata(:,3)>raw_fitdata(:,5)).*... % Amplitude > offset
-                        (raw_fitdata(:,7)>raw_fitdata(:,8)).*... % x location bigger than x location error
+                    raw_fitdata(:,13)=(raw_fitdata(:,3)>0).*... % Amplitude > amp error
                         (raw_fitdata(:,16)>raw_fitdata(:,17)).*... % width > error
                         (raw_fitdata(:,8)<width_error_ub).*...
                         (raw_fitdata(:,17)<width_error_ub).*... % Width error < UB
@@ -344,6 +435,7 @@ for curr_mainFold=1:numel(datalist)  % Loop each movie for guessing/fitting/trac
                         ((1./raw_fitdata(:,18))<aspect_ratio_ub).*... % aspect ratio (Wy / Wx) < UB
                         logical(raw_fitdata(:,21)).*... % Within cell boundaries
                         ~isnan(raw_fitdata(:,19));  % Non-NaN z-position
+                    
                     goodfitdata{ii}=raw_fitdata(raw_fitdata(:,13)==1,:);
                 end
             end
@@ -355,6 +447,10 @@ for curr_mainFold=1:numel(datalist)  % Loop each movie for guessing/fitting/trac
         % WRITE FITS TO ANALYSIS FILE
         m.goodfitdata=goodfitdata;
         m.guesses=guesses;
+        m.skippedframes=find(cat(1,skippedframes{:}));
+        m.peak_guessing_params=peak_guessing_params;
+        
+        mnamelist=who(m); mnamelist=mnamelist(:);
     else
         goodfitdata=m.goodfitdata;
         guesses=m.guesses;
@@ -384,7 +480,9 @@ for curr_mainFold=1:numel(datalist)  % Loop each movie for guessing/fitting/trac
     %  3D Tracking
     %  ------------------------------------------------------------------------
     
-    if sum(cellfun(@strcmp,mnamelist,repmat({'trackfile'},...
+    if yestracking==0
+        trfile=[];
+    elseif sum(cellfun(@strcmp,mnamelist,repmat({'trackfile'},...
             [numel(mnamelist),1])))==0||yestracking==1
         % WRITE TRACKING FILE
         trfile=Track_3D2(goodfitdata,sROI,tROI,min_merit,alpha,gamma,...
@@ -395,9 +493,8 @@ for curr_mainFold=1:numel(datalist)  % Loop each movie for guessing/fitting/trac
                 datalist{curr_mainFold}(1:end-4)...
                 '''. Check tracking parameters.\n']);
         end
-    elseif yestracking==0;
-        trfile=[];
-    else
+    elseif sum(cellfun(@strcmp,mnamelist,repmat({'trackfile'},...
+            [numel(mnamelist),1])))
         trfile=m.trackfile;
     end
     
@@ -410,7 +507,7 @@ for curr_mainFold=1:numel(datalist)  % Loop each movie for guessing/fitting/trac
             
             % WRITE MP4 MOVIE OF FITS
             Viewfits3([datalist{curr_mainFold}(1:end-4),'.bin'],...
-                goodfitdata,guesses,trfile,7,25);
+                goodfitdata,guesses,trfile,7,framerate);
         else
             fprintf(['The fit file for''',datalist{curr_mainFold},...
                 ''' does not exist or contains no data. Skip producing ',...
@@ -425,18 +522,19 @@ for curr_mainFold=1:numel(datalist)  % Loop each movie for guessing/fitting/trac
     
     % Skip plotting tracks if there's no data in the tracking file.
     if numel(trfile)>0
-        if numel(phaselist)==numel(datalist)&&iscell(phaselist)
+        if yesselectcells==1
             % plot 2D tracks
             img=imread(phaselist{curr_mainFold},'tif');
         else img=m.phasemask;
         end
+        img=double(img);
         
         magfactor=1; %ceil(2e3/min(size(img)));
         img=kron(img,ones(magfactor));
         trfile=trfile*magfactor;
         
-%         imshow(img,[mean2(img)-std2(img),mean2(img)+4*std2(img)]); hold on;
-
+        %         imshow(img,[mean2(img)-std2(img),mean2(img)+4*std2(img)]); hold on;
+        
         hastrack=unique(trfile(:,1))';
         cm=jet(numel(hastrack));
         
@@ -448,11 +546,6 @@ for curr_mainFold=1:numel(datalist)  % Loop each movie for guessing/fitting/trac
             
             % If the current track meets the length requirement.
             if (tr_end_row-tr_start_row+1)>=min_tr_length
-%                 plot3(trfile(tr_start_row:tr_end_row,4),...
-%                     trfile(tr_start_row:tr_end_row,5),...
-%                     zeros(numel(tr_start_row:tr_end_row)),...
-%                     'Color',cm(hastrack==trnum,:),...
-%                     'linewidth',1);
                 plot(trfile(tr_start_row:tr_end_row,4),...
                     trfile(tr_start_row:tr_end_row,5),...
                     'Color',cm(hastrack==trnum,:),...
@@ -460,9 +553,6 @@ for curr_mainFold=1:numel(datalist)  % Loop each movie for guessing/fitting/trac
                 hold on
             end
         end
-%         set(gca,'layer','top')
-%         a=surf(img-max(img(:))); axis off; view([0,90])
-%         imshow(img,[mean2(img)-std2(img),mean2(img)+4*std2(img)]);
         ii=pcolor(img); colormap('gray');
         set(ii,'edgecolor','none'); colormap('gray'); axis image
         
@@ -497,30 +587,6 @@ for curr_mainFold=1:numel(datalist)  % Loop each movie for guessing/fitting/trac
             ''' does not exist or contains no data.\n Skip plotting tracks. \n']);
     end
     
-    if numel(trfile)>0
-        tracknums=unique(trfile(:,1));
-        cellnums=unique(trfile(:,13));
-        for ii=1:numel(cellnums)
-            for jj=1:numel(tracknums)
-                hout.tracks{ii}{jj}=trfile(trfile(:,1)==tracknums(jj)&...
-                    trfile(:,13)==cellnums(ii),[4,5,15]);
-                hout.trackerrors{ii}{jj}=trfile(trfile(:,1)==tracknums(jj)&...
-                    trfile(:,13)==cellnums(ii),[8,11,16]);
-            end
-        end
-    end
-    
-    framenums=unique(goodfitdata(:,1));
-    cellnums=unique(goodfitdata(:,21));
-    for ii=1:numel(cellnums)
-        for jj=1:numel(framenums)
-            hout.positions{ii}{jj}=goodfitdata(goodfitdata(:,1)==framenums(jj)&...
-                goodfitdata(:,21)==cellnums(ii),[9,11,19]);
-            hout.positionserrors{ii}{jj}=goodfitdata(goodfitdata(:,1)==framenums(jj)&...
-                goodfitdata(:,21)==cellnums(ii),[10,12,20]);
-        end
-    end
-    m.hout=hout;
 end
 
 cd(origdir)
@@ -564,12 +630,17 @@ wobj.Quality=90;
 magfactor=ceil(150/min(sz)); % movie should have 150 pixels across
 
 open(wobj)
+h1=waitbar(0,'writing viewfits movie.');
 for ii=1:nframes % Looping through each frame
+    waitbar(ii/nframes,h1);
     currentframe=double(bingetframes(vidloc,ii,[]));
+    
+    % AUTOSCALING
+    currentframe=currentframe-min(currentframe(:));
     
     % written video must be 8-bit
     currentframe=currentframe/max(currentframe(:));
-
+    
     % Maximum intensity of the current frame.
     curr_fr_maxint=1;
     
@@ -613,16 +684,22 @@ for ii=1:nframes % Looping through each frame
         for jj=1:size(currentframe,3)
             currentframe2(:,:,jj)=kron(currentframe(:,:,jj),ones(magfactor));
         end
+    else
+        currentframe2=currentframe;
     end
-        
+    
     writeVideo(wobj,currentframe2)
 end
+if ishandle(h1)
+    close(h1)
+end
+
 close(wobj);
 end
 
 function currentframe=makebox(currentframe,curr_fr_maxint,...
     pix_x,pix_y,half_symbol_size,sz)
-    
+
 for ii=1:size(currentframe,3)
     b=pix_y-half_symbol_size;
     t=pix_y+half_symbol_size;
@@ -738,7 +815,7 @@ function [cell_xy,good_cell]=select_cells(PhaseMask)
 
 % good_cell: The indices of chosen cells
 
-cell_fig_h=figure; 
+cell_fig_h=figure;
 imshow(PhaseMask~=0,[],'Border','Tight');
 title(sprintf(['Left-click on cells to be analyzed.\n Press ''Enter'' to proceed.\n'...
     ' Or click return without clicking\n on any cell to analyze ALL of them.']))
@@ -781,4 +858,8 @@ else % If the user hits "Enter" directly, use all cells.
     good_cell=1:max(PhaseMask(:));
 end
 close(cell_fig_h);
+end
+
+function closewaitbar(h)
+if ishandle(h1); close(h); end
 end
