@@ -26,7 +26,7 @@ yestracking=1;
 % use phasemasks?
 yesphasemasks=1;
 
-% select cells from phase mask?
+% skip selecting cells from phase mask?
 skipselect=0;
 
 % run 3d code?
@@ -100,6 +100,14 @@ gamma=3;
 min_tr_length=5;
 speed_boxcar_halfsize=1;
 
+trackparams(1)=min_merit;
+trackparams(2)=itgtime;
+trackparams(3)=gamma;
+trackparams(4)=max_step_size;
+trackparams(5)=min_tr_length;
+trackparams(6)=speed_boxcar_halfsize;
+trackparams(7)=timedelay;
+
 %% ------------------------------------------------------------------------
 %  Load 3D Fitting Parameters and Phase Masks
 
@@ -163,10 +171,10 @@ if yesbgroundsub
                 waitbar(jj/floor(nframes/subwidth),h1)
                 if jj~=floor(nframes/subwidth)
                     v=bingetframes([fullfile(dlocs{ii},dnames{ii}) '.bin'],...
-                    1+subwidth*(jj-1):subwidth*jj,[]);
+                        1+subwidth*(jj-1):subwidth*jj,[]);
                 else
                     v=bingetframes([fullfile(dlocs{ii},dnames{ii}) '.bin'],...
-                    1+subwidth*(jj-1):nframes,[]);
+                        1+subwidth*(jj-1):nframes,[]);
                 end
                 
                 fwrite(fid,uint16(bsxfun(@plus,double(v),-mean(v,3))+offset),'uint16');
@@ -520,21 +528,131 @@ for curr_mainFold=1:numel(dnames)  % Loop each movie for guessing/fitting/tracki
     %  3D Tracking
     %  ------------------------------------------------------------------------
     
+    % if tracking is disabled
     if ~yestracking
         trfile=[];
+        
+    % if the trackfile doesn't exist in the analysis file or if tracking is
+    % enforced
     elseif sum(cellfun(@strcmp,mnamelist,repmat({'trackfile'},...
             [numel(mnamelist),1])))==0||yestracking
-        % WRITE TRACKING FILE
-        trfile=Track_3D2(goodfitdata,sROI,tROI,min_merit,alpha,gamma,...
-            min_tr_length,speed_boxcar_halfsize,pxsize,timedelay,itgtime);
-        m.trackfile=trfile;
-        if isempty(trfile)
-            fprintf(['No available tracks for ''',dnames{curr_mainfold}...
-                '''. Check tracking parameters.\n']);
+        
+        if yesphasemasks            % if phasemasks are used
+            % plot 2D tracks
+            img=imread(fullfile(plocs{curr_mainfold},pnames{curr_mainfold},pexts{curr_mainfold}),'tif');
+        else                        % if phasemasks aren't used
+            img=m.phasemask;
         end
-    elseif sum(cellfun(@strcmp,mnamelist,repmat({'trackfile'},...
-            [numel(mnamelist),1])))
-        trfile=m.trackfile;
+        img=double(img);            % make sure the image isn't integers
+        
+        % magnify the movie?
+        magfactor=1; %ceil(2e3/min(size(img)));
+        img=kron(img,ones(magfactor));
+        
+        % WRITE TRACKING FILE
+        fprintf(['tracking file named: ' dnames{ii} '.\n'])
+        counter=0;
+        while counter<2         % two sequential agreements finish this loop
+            
+            % if trackparams exist in the analysis file and it's the first
+            % time the while loop has run
+            mnamelist=who(m); mnamelist=mnamelist(:);
+            if any(cellfun(@strcmp,mnamelist,repmat({'trackparams'},...
+                    [numel(mnamelist),1])))&&counter==0
+                temptrackparams=m.trackparams;
+                
+                % if yescheckvals is enabled and any of the 
+                if yescheckvals&&any(temptrackparams~=trackparams)
+                    useold=input('use tracking params from analysis file?');
+                    if ~useold
+                        trackparams=temptrackparams;
+                    end
+                end
+            end
+            
+            if exist('yn','var')&&~isempty(yn)
+                trackparams=yn;
+                counter=0;
+            else
+                counter=counter+1;
+            end
+            
+            alpha=-log(trackparams(1))/trackparams(4);
+            trfile=Track_3D2(goodfitdata,sROI,tROI,trackparams(1),...
+                alpha,trackparams(3),...
+                trackparams(5),trackparams(6),pxsize,trackparams(7),trackparams(2));
+            
+            if isempty(trfile)
+                fprintf(['No available tracks for ''',dnames{curr_mainfold}...
+                    '''. Check tracking parameters.\n']);
+            else
+                trfile=trfile*magfactor;
+                
+                hastrack=unique(trfile(:,1))';
+                cm=jet(numel(hastrack));
+                
+                h=figure('units','pixels');
+                % Loop through each track
+                for trnum=hastrack % Loop through each track
+                    tr_start_row=find(trfile(:,1)==trnum,1);
+                    tr_end_row=find(trfile(:,1)==trnum,1,'last');
+                    
+                    % If the current track meets the length requirement.
+                    if (tr_end_row-tr_start_row+1)>=min_tr_length
+                        plot(trfile(tr_start_row:tr_end_row,4),...
+                            trfile(tr_start_row:tr_end_row,5),...
+                            'Color',cm(hastrack==trnum,:),...
+                            'linewidth',1);
+                        hold on
+                    end
+                end
+                ii=pcolor(img); colormap('gray');
+                set(ii,'edgecolor','none'); colormap('gray'); axis image
+                
+                % WRITE 2D TRACKING FIG
+                saveas(gcf,[fullfile(dlocs{curr_mainfold},dnames{curr_mainfold}), '_2Dtracks.fig']);
+                if exist('h','var'); if ishandle(h); close(h); end; end
+                
+                if yes3d
+                    % Plotting 3D tracks
+                    
+                    % Loop through each track
+                    for trnum=max(trfile(:,1)):-1:1
+                        tr_start_row=find(trfile(:,1)==trnum,1);
+                        tr_end_row=find(trfile(:,1)==trnum,1,'last');
+                        
+                        % If the current track meets the length requirement.
+                        if (tr_end_row-tr_start_row+1)>=min_tr_length
+                            plot3(trfile(tr_start_row:tr_end_row,4)*pxsize,...
+                                trfile(tr_start_row:tr_end_row,5)*pxsize,...
+                                trfile(tr_start_row:tr_end_row,15)*pxsize,...
+                                'Color','r');
+                            hold all
+                        end
+                    end
+                    grid on
+                    % WRITE 3D TRACKING FIG
+                    saveas(gcf,[datalist{curr_mainFold}(1:end-4),'_3Dtracks.fig']);
+                    close
+                end
+                trfile=trfile/magfactor;
+            end
+            
+            tpar.min_merit=trackparams(1);
+            tpar.itgtime=trackparams(2);
+            tpar.gamma=trackparams(3);
+            tpar.max_step_size=trackparams(4);
+            tpar.min_tr_length=trackparams(5);
+            tpar.speed_boxcar_halfsize=trackparams(6);
+            tpar.timedelay=trackparams(7);
+            
+            display(tpar)
+            yn=input(['input new tracking parameters?\n enter for ''no'', '...
+                'the parameters for ''yes''. \n two sequential ''nos'' means '...
+                'it''s good to go.\n']);
+        end
+        m.trackfile=trfile;
+        m.trackparams=trackparams;
     end
     
     % Output ViewFit Files for the Current Movie (If Selected)
@@ -553,80 +671,7 @@ for curr_mainFold=1:numel(dnames)  % Loop each movie for guessing/fitting/tracki
                 'ViewFits files. \n']);
         end
     end
-    
-    %% ------------------------------------------------------------------------
-    % Plotting 2D Tracks over White Light Images and 3D Tracks in free
-    % space
-    %  ------------------------------------------------------------------------
-    
-    % Skip plotting tracks if there's no data in the tracking file.
-    if numel(trfile)>0
-        if yesphasemasks
-            % plot 2D tracks
-            img=imread(fullfile(plocs{curr_mainfold},pnames{curr_mainfold},pexts{curr_mainfold}),'tif');
-        else img=m.phasemask;
-        end
-        img=double(img);
-        
-        magfactor=1; %ceil(2e3/min(size(img)));
-        img=kron(img,ones(magfactor));
-        trfile=trfile*magfactor;
-        
-        hastrack=unique(trfile(:,1))';
-        cm=jet(numel(hastrack));
-        
-        h=figure('units','pixels');
-        % Loop through each track
-        for trnum=hastrack % Loop through each track
-            tr_start_row=find(trfile(:,1)==trnum,1);
-            tr_end_row=find(trfile(:,1)==trnum,1,'last');
-            
-            % If the current track meets the length requirement.
-            if (tr_end_row-tr_start_row+1)>=min_tr_length
-                plot(trfile(tr_start_row:tr_end_row,4),...
-                    trfile(tr_start_row:tr_end_row,5),...
-                    'Color',cm(hastrack==trnum,:),...
-                    'linewidth',1);
-                hold on
-            end
-        end
-        ii=pcolor(img); colormap('gray');
-        set(ii,'edgecolor','none'); colormap('gray'); axis image
-        
-        % WRITE 2D TRACKING FIG
-        saveas(gcf,[fullfile(dlocs{curr_mainfold},dnames{curr_mainfold}), '_2Dtracks.fig']);
-        if exist('h','var'); if ishandle(h); close(h); end; end
-        
-        if yes3d
-            % Plotting 3D tracks
-            
-            % Loop through each track
-            for trnum=max(trfile(:,1)):-1:1
-                tr_start_row=find(trfile(:,1)==trnum,1);
-                tr_end_row=find(trfile(:,1)==trnum,1,'last');
-                
-                % If the current track meets the length requirement.
-                if (tr_end_row-tr_start_row+1)>=min_tr_length
-                    plot3(trfile(tr_start_row:tr_end_row,4)*pxsize,...
-                        trfile(tr_start_row:tr_end_row,5)*pxsize,...
-                        trfile(tr_start_row:tr_end_row,15)*pxsize,...
-                        'Color','r');
-                    hold all
-                end
-            end
-            grid on
-            % WRITE 3D TRACKING FIG
-            saveas(gcf,[datalist{curr_mainFold}(1:end-4),'_3Dtracks.fig']);
-            close
-        end
-    else
-        fprintf(['The tracking file for ''', dnames{curr_mainFold}(1:end-4), ...
-            ''' does not exist or contains no data.\n Skip plotting tracks. \n']);
-    end
-    
 end
-
-cd(origdir)
 end
 
 function Viewfits3(vidloc,fitfile1,guesses,trfile,half_symbol_size,framerate)

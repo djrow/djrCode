@@ -28,37 +28,6 @@ gfittype=156;
 % parameters for phase mask finding. dilate factor, low thresh, high thres,
 % autofill, min area, max area
 phaseparams=[2,0,.9,1,500,1000];
-ppar.dilate_factor=phaseparams(1);
-ppar.low_threshold=phaseparams(2);
-ppar.high_threshold=phaseparams(3);
-ppar.autofill_bool=phaseparams(4);
-ppar.min_area=phaseparams(5);
-ppar.max_area=phaseparams(6);
-
-% Parameters for peak guessing, in the format of [noise size, particle
-% size, Intensity Threshold, H-Max]. usually [1,10,2e3,1e4]
-peak_guessing_params=[1,10,5000,10000];
-
-% Minimal separation of peaks (px). Putative peaks that are closer than
-% this value will be discarded unless it is the brightest one compared to
-% its neighbors. Also, this is the half box size of the fitting region,
-% i.e., if 'min_sep = 10', pixel intensities within a 21-by-21 square
-% region will be used in PSF fitting.
-min_sep=10;
-
-% Lower and upper bounds (in pixels, except for the aspect ratio) for
-% various fit parameters that will be used to determine whether a fit is
-% "good". See comments of the 'determine_goodfits.m' code for more details.
-width_lb=1;
-width_ub=15;
-aspect_ratio_ub=5;
-width_error_ub=5;
-
-% Pixel size in nm.
-pxsize=49;
-
-% camera capture rate in 1/s
-framerate=100;
 
 % maximum frame separation to consider for msd
 maxtau=10;
@@ -137,6 +106,7 @@ if phasemasks==1&&yesstics==1&&checkvals==1
             
             if exist('yn','var')&&~isempty(yn)
                 phaseparams=yn;
+                counter=0;
             else
                 counter=counter+1;
             end
