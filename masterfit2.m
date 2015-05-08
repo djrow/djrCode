@@ -1,4 +1,4 @@
-function masterfit2(mainfold,checkvals,name)
+function masterfit2(mainfold,checkvals)
 % mainfold should have nd2 files or tiff stacks. if there are phasemask tiff
 % files, they should correspond 1:1 with the nd2 files. the outputs written
 % to disk are a 2Dtracks.fig, fits.fig, _analysis.mat, and a binary version
@@ -12,8 +12,7 @@ function masterfit2(mainfold,checkvals,name)
 %% ------------------------------------------------------------------------
 %  User-Defined Parameters
 %  ------------------------------------------------------------------------
-origdir=pwd;
-cd(mainfold)
+
 % run peak fitting in parallel. set this to 0 if you need to fix the peak
 % guessing or fitting parameters.
 % checkvals=0;
@@ -25,7 +24,7 @@ yesfitting=0;
 yestracking=1;
 
 % select cells from phase mask?
-yesselectcells=0;
+skipselect=0;
 
 % run 3d code?
 yes3d=0;
@@ -104,7 +103,7 @@ speed_boxcar_halfsize=1;
 if yes3d==1
     % Load defocusing_param, which stores results from fitting to the
     % calibration curves.
-    m=matfile('calibdata');
+    m=matfile(fullfile(mainfold,'calibdata.mat'));
     if ~isempty(who(m))
         defocusing_param=m.defocusing_param;
         z_std_LUT=m.zuncLUT;
@@ -114,30 +113,30 @@ if yes3d==1
     end
 end
 
-if nargin<3
-    datalist=uigetfile(cat(1,{'*.nd2'},{'*.tif*'},{'*.bin'}),'multiselect','on');
-else
-    datalist={name};
-end
-if ~iscell(datalist)
-    if datalist==0
+if yesfitting
+    display('Select the movies.')
+    [datalist,dataloc,findex]=uigetfile([mainfold filesep '*.nd2;*.tif*;*.bin'],...
+        'Matlab Files','multiselect','on');
+    
+    if findex==0
         fprintf('no data selected\n')
         return
     end
-    datalist={datalist};
-end
-
-% WRITE BIN FILES FOR ALL MOVIES
-if nargin<3
-    for ii=1:numel(datalist);
-        if numel(dir([datalist{ii}(1:end-4) '.bin']))==0
-            writebin(datalist{ii});
+    
+    if ~iscell(datalist); datalist={datalist}; end
+    for ii=1:numel(datalist); datalist{ii}=[dataloc datalist{ii}]; end
+    [dlocs,dnames,dexts]=cellfun(@fileparts,datalist,'uniformoutput',false);
+    
+    % WRITE BIN FILES FOR ALL MOVIES
+    for ii=1:numel(dnames);
+        if strcmp(dexts{ii},'.nd2')||strcmp(dexts{ii},'.tif')||strcmp(dexts{ii},'.tiff')
+            writebin(fullfile(dlocs{ii},[dnames{ii},dexts{ii}]));
         end
     end
 end
 
 % WRITE BACKGROUND SUBTRACTED BINARY FILE
-if bgroundsub==1
+if bgroundsub
     for ii=1:numel(datalist);
         if numel(dir([datalist{ii}(1:end-4) '_bgsub.bin']))==0
             fid=fopen([datalist{ii}(1:end-4) '_bgsub.bin'],'W');
@@ -168,51 +167,76 @@ if bgroundsub==1
 end
 
 % WRITE PHASEMASKS FILE FOR ALL MOVIES
-if yesselectcells==1
-    [phaselistname,phaselistloc]=uigetfile(cat(1,{'*.tif*'},{'*.nd2'},{'*.bin'}),'multiselect','on');
-    
-    if ~iscell(phaselistname)
-        phaselist2={phaselistname};
-        phaselistname=phaselist2;
-        clear phaselist2;
+if phasemasks==1&&yesstics==1&&checkvals==1
+    display('Select the phase images.')
+    [phaselist,phaselistloc,findex]=uigetfile([mainfold filesep...
+        '*.nd2;*.tif*;*.bin'],'Matlab Files','multiselect','on');
+    if findex==0
+        fprintf('no phase images selected. try again.\n')
+        return
     end
-    phaselistloc={phaselistloc};
-    phaselist=cellfun(@(x,y)[x,y],phaselistloc(ones(1,numel(phaselistname))),phaselistname,'uniformoutput',0);
     
-    for ii=1:numel(datalist)
-        m=matfile([datalist{ii}(1:end-4),'_analysis.mat'],'Writable',true);
+    if ~iscell(phaselist); phaselist={phaselist}; end
+    for ii=1:numel(phaselist); phaselist{ii}=[phaselistloc phaselist{ii}]; end
+    [plocs,pnames,pexts]=cellfun(@fileparts,phaselist,'uniformoutput',false);
+    
+    for ii=1:numel(dnames)
+        m=matfile([fullfile(dlocs{ii},dnames{ii}),'_analysis.mat'],'Writable',true);
         
-        mnamelist=who(m); mnamelist=mnamelist(:);
-        if any(cellfun(@strcmp,mnamelist,repmat({'phaseparams'},...
-                [numel(mnamelist),1])))
-            phaseparams=m.phaseparams;
+        if strcmp(pexts{ii},'.nd2')||strcmp(pexts{ii},'.tif')||strcmp(pexts{ii},'.tiff')
+            writebin(phaselist{ii});
+            img=bingetframes(fullfile(plocs{ii},pnames{ii},'.bin'));
+        else
+            img=bingetframes(fullfile(plocs{ii},[pnames{ii},pexts{ii}]));
+        end
+        
+        fprintf(['phasing file named: ' dnames{ii} '.\n'])
+        counter=0;
+        while counter<2
             
-            yn=input(['input new phase image parameters? enter for ''no'', '...
-                'the parameters for ''yes''.\n']);
+            mnamelist=who(m); mnamelist=mnamelist(:);
+            if any(cellfun(@strcmp,mnamelist,repmat({'phaseparams'},...
+                    [numel(mnamelist),1])))&&counter==0
+                phaseparams=m.phaseparams;
+            end
+            
+            if exist('yn','var')&&~isempty(yn)
+                phaseparams=yn;
+            else
+                counter=counter+1;
+            end
+            
+            phasemask=valley(img(:,:,1),phaseparams,checkvals);
+            
+            ppar.dilate_factor=phaseparams(1);
+            ppar.low_threshold=phaseparams(2);
+            ppar.high_threshold=phaseparams(3);
+            ppar.autofill_bool=phaseparams(4);
+            ppar.min_area=phaseparams(5);
+            ppar.max_area=phaseparams(6);
+            
+            display(ppar)
+            yn=input(['input new phase image parameters?\n enter for ''no'', '...
+                'the parameters for ''yes''. \n two sequential ''nos'' means '...
+                'it''s good to go.\n']);
         end
-        
-        if exist('yn','var')&&~isempty(yn)
-            phaseparams=yn;
-        end
-        
-        img=imread(phaselist{ii},'tif');
-        phasemask=valley(img(:,:,1),phaseparams,checkvals);
-        if yesselectcells==1
-            [~,goodcells]=select_cells(phasemask);
+        if skipselect==0
+            [~,goodcells]=select_cells(phasemask,img);
             phasemask(logical(-1*(ismember(phasemask,goodcells)-1)))=0;
         end
         m.phasemask=phasemask;
         m.phaseparams=phaseparams;
     end
-else
-    for ii=1:numel(datalist)
-        [~,~,sz]=bingetframes([datalist{ii}(1:end-4),'.bin'],1,[]);
-        m=matfile([datalist{ii}(1:end-4),'_analysis.mat'],'Writable',true);
+elseif yesstics==1&&checkvals==1
+    for ii=1:numel(dnames)
+        [~,~,sz]=bingetframes([fullfile(dlocs{ii},dnames{ii}),'.bin'],1,[]);
+        m=matfile([fullfile(dlocs{ii},dnames{ii}),'_analysis.mat'],'Writable',true);
         
         phasemask=ones(sz);
         m.phasemask=phasemask;
     end
 end
+
 
 % Spatial ROI and temporal ROI. Though currently not used and function
 % merely as place holders, these parameters will be employed to expand the
