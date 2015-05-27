@@ -1,4 +1,4 @@
-function res = bpass(image_array,lnoise,lobject,threshold)
+function res = bpass(image_array,lnoise,lobject,threshold,lzero)
 % 
 % NAME:
 %               bpass
@@ -137,7 +137,7 @@ end
 % commented out because why do it in the first place?
 % % Zero out the values on the edges to signal that they're not useful.     
 % lzero = max(lobject,ceil(5*lnoise));
-lzero=5;
+% lzero=0;
 
 filtered(1:(round(lzero)),:) = 0;
 filtered((end - lzero + 1):end,:) = 0;

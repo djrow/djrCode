@@ -1,4 +1,4 @@
-function masterfit2(mainfold,yescheckvals)
+function trfile=masterfit2(mainfold,yescheckvals,yesfitting)
 % mainfold should have nd2 files or tiff stacks. if there are phasemask tiff
 % files, they should correspond 1:1 with the nd2 files. the outputs written
 % to disk are a 2Dtracks.fig, fits.fig, _analysis.mat, and a binary version
@@ -18,16 +18,20 @@ function masterfit2(mainfold,yescheckvals)
 % checkvals=0;
 
 % run fitting?
-yesfitting=0;
+% yesfitting=0;
 
 % run tracking?
 yestracking=1;
 
 % use phasemasks?
-yesphasemasks=1;
+yesphasemasks=0;
 
-% skip selecting cells from phase mask?
+% skip selecting cells from phase mask? this choice is skipped if
+% yesphasemasks is false
 skipselect=0;
+
+% plot things?
+yesplot=0;
 
 % run 3d code?
 yes3d=0;
@@ -55,8 +59,8 @@ viewfits_mv=0;
 phaseparams=[1,0,2,0,100,10000];
 
 % Parameters for peak guessing, in the format of [noise size, particle
-% size, Intensity Threshold, H-Max]. usually [1,10,2e3,1e4]
-peak_guessing_params=[1,10,200,10];
+% size, Intensity Threshold, H-Max, lzero]. usually [1,10,2e3,1e4,5]
+peak_guessing_params=[1,10,200,5e3,0];
 
 % Minimal separation of peaks (px). Putative peaks that are closer than
 % this value will be discarded unless it is the brightest one compared to
@@ -92,11 +96,11 @@ indRefr_corr=0.79;
 % (See comments from the 'Track_3D.m' code for the meaning of each
 % paramter)
 timedelay=0; % Time delay between consecutive frames (ms)
-itgtime=40; % Integration time (ms)
+itgtime=10; % Integration time (ms)
 min_merit=0.1;
-max_step_size=10;
+max_step_size=1e2;
 alpha=-log(min_merit)/max_step_size;
-gamma=3;
+gamma=0;
 min_tr_length=5;
 speed_boxcar_halfsize=1;
 
@@ -124,7 +128,7 @@ if yes3d
     end
 end
 
-if yesfitting
+if yesfitting&&ischar(mainfold)
     display('Select the movies.')
     [datalist,dataloc,findex]=uigetfile([mainfold filesep '*.nd2;*.tif*;*.bin'],...
         'Matlab Files','multiselect','on');
@@ -144,7 +148,7 @@ if yesfitting
             writebin(fullfile(dlocs{ii},[dnames{ii},dexts{ii}]));
         end
     end
-else
+elseif ~yesfitting&&ischar(mainfold)
     display('Select the analysis files.')
     [datalist,dataloc,findex]=uigetfile([mainfold filesep '*.mat'],...
         'Matlab Files','multiselect','on');
@@ -157,6 +161,11 @@ else
     if ~iscell(datalist); datalist={datalist}; end
     for ii=1:numel(datalist); datalist{ii}=[dataloc datalist{ii}]; end
     [dlocs,dnames,dexts]=cellfun(@fileparts,datalist,'uniformoutput',false);
+elseif isstruct(mainfold)
+    [dlocs,dnames,dexts]=fileparts(mainfold.name);
+    dlocs={dlocs};
+    dnames={dnames};
+    dexts={dexts};
 end
 
 % WRITE BACKGROUND SUBTRACTED BINARY FILE
@@ -193,7 +202,7 @@ if yesbgroundsub
 end
 
 % WRITE PHASEMASKS FILE FOR ALL MOVIES
-if yesphasemasks&&yesfitting&&yescheckvals
+if yesphasemasks&&yesfitting&&yescheckvals&&ischar(mainfold)
     display('Select the phase images.')
     [phaselist,phaselistloc,findex]=uigetfile([mainfold filesep...
         '*.nd2;*.tif*;*.bin'],'Matlab Files','multiselect','on');
@@ -234,26 +243,28 @@ if yesphasemasks&&yesfitting&&yescheckvals
             
             phasemask=valley(img(:,:,1),phaseparams,yescheckvals);
             
-            ppar.dilate_factor=phaseparams(1);
-            ppar.low_threshold=phaseparams(2);
-            ppar.high_threshold=phaseparams(3);
-            ppar.autofill_bool=phaseparams(4);
-            ppar.min_area=phaseparams(5);
-            ppar.max_area=phaseparams(6);
+            % prompt user for parameter changes
+            dlgPrompt={'dilation factor', 'lower threshold',...
+                'higher threshold','autofill y/n','minimum cell area',...
+                'maximum cell area'};
+            dlgTitle='Phasemask';
+            numDlgLines=1;
+            def={num2str(phaseparams(1)),num2str(phaseparams(2)),...
+                num2str(phaseparams(3)),num2str(phaseparams(4)),...
+                num2str(phaseparams(5)),num2str(phaseparams(6))};
+            opts.WindowStyle='normal';
             
-            display(ppar)
-            yn=input(['input new phase image parameters?\n enter for ''no'', '...
-                'the parameters for ''yes''. \n two sequential ''nos'' means '...
-                'it''s good to go.\n']);
+            yn=cellfun(@str2double,inputdlg(dlgPrompt,dlgTitle,numDlgLines,def,opts))';
+            
         end
-        if skipselect==0
+        if ~skipselect
             [~,goodcells]=select_cells(phasemask,img);
             phasemask(logical(-1*(ismember(phasemask,goodcells)-1)))=0;
         end
         m.phasemask=phasemask;
         m.phaseparams=phaseparams;
     end
-elseif yesfitting&&yescheckvals
+elseif yesfitting&&~yesphasemasks
     for ii=1:numel(dnames)
         [~,~,sz]=bingetframes([fullfile(dlocs{ii},dnames{ii}),'.bin'],1,[]);
         m=matfile([fullfile(dlocs{ii},dnames{ii}),'_analysis.mat'],'Writable',true);
@@ -270,22 +281,22 @@ end
 sROI=1;
 tROI=1;
 
-for curr_mainFold=1:numel(dnames)  % Loop each movie for guessing/fitting/tracking
-    % Display movie folder counter
-    fprintf(['Fitting this movie: ',dnames{curr_mainfold},'\n'])
-    
+for curr_mainfold=1:numel(dnames)  % Loop each movie for guessing/fitting/tracking
     [~,num_files,~]=bingetframes([fullfile(dlocs{curr_mainfold},dnames{curr_mainfold}),'.bin'],1,[]);
     
     m=matfile([fullfile(dlocs{curr_mainfold},dnames{curr_mainfold}),'_analysis.mat'],'Writable',true);
     mnamelist=who(m); mnamelist=mnamelist(:);
     
+    phasemask=m.phasemask;
+    
     %% psf fitting
     goodfitdata={[]}; guesses=cell(1,num_files);
-    phasemask=m.phasemask;
     
     skippedframes={};
     if any(cellfun(@strcmp,mnamelist,repmat({'goodfitdata'},...
             [numel(mnamelist),1])))==0||yesfitting==1
+        % Display movie folder counter
+        fprintf(['Fitting this movie: ',dnames{curr_mainfold},'\n'])
         if yescheckvals==1
             frameskip=0;
             h1=waitbar(0,'fittin stuff');
@@ -426,9 +437,9 @@ for curr_mainFold=1:numel(dnames)  % Loop each movie for guessing/fitting/tracki
                 peak_guessing_params=m.peak_guessing_params;
             end
             
-            parfor_progress(num_files); % get this m-file
-            parfor ii=1:num_files
-                parfor_progress;
+            %             parfor_progress(num_files); % get this m-file
+            for ii=1:num_files
+                %                 parfor_progress;
                 
                 [thisframe,~,~,tval]=bingetframes(...
                     [fullfile(dlocs{curr_mainfold},dnames{curr_mainfold}) '.bin'],ii,[]);
@@ -454,13 +465,15 @@ for curr_mainFold=1:numel(dnames)  % Loop each movie for guessing/fitting/tracki
                     z_px=zeros(size(all_fitparam,1),1);
                     z_uncertainty_px=zeros(size(all_fitparam,1),1);
                 end
+                % the centers have to be inside the frame
                 valid_param_rows=find(all_fitparam(:,4)>=0&all_fitparam(:,5)>=0&...
                     all_fitparam(:,4)<=size(phasemask,2)&...
                     all_fitparam(:,5)<=size(phasemask,1));
                 all_fitparam=all_fitparam(valid_param_rows,:);
                 all_fiterr=all_fiterr(valid_param_rows,:);
                 numfits=size(all_fitparam,1);
-                if ~numfits
+                
+                if numfits
                     raw_fitdata=[repmat(ii,[numfits,1]),(1:numfits)',... % col 1,2
                         all_fitparam(:,1),all_fiterr(:,1),all_fitparam(:,2),... % 3,4,5
                         all_fiterr(:,2),all_fitparam(:,3),all_fiterr(:,3),... % 6,7,8
@@ -488,7 +501,7 @@ for curr_mainFold=1:numel(dnames)  % Loop each movie for guessing/fitting/tracki
                     goodfitdata{ii}=raw_fitdata(raw_fitdata(:,13)==1,:);
                 end
             end
-            parfor_progress(0);
+            %             parfor_progress(0);
         end
         
         goodfitdata=cat(1,goodfitdata{:});
@@ -519,11 +532,13 @@ for curr_mainFold=1:numel(dnames)  % Loop each movie for guessing/fitting/tracki
         GoodFitsFile_DatToCsv_PovRay3D2(...
             fullfile(dlocs{curr_mainfold},dnames{curr_mainfold}),goodfitdata);
     end
-    % WRITE FITS FIG
-    % Plot 3D Localization (Without Gaussian-Blur)
-    Plot_3D_fits2(goodfitdata,3,49,...
-        [fullfile(dlocs{curr_mainfold},dnames{curr_mainfold}),'_fits.fig']);
     
+    if yesplot
+        % WRITE FITS FIG
+        % Plot 3D Localization (Without Gaussian-Blur)
+        Plot_3D_fits2(goodfitdata,3,49,...
+            [fullfile(dlocs{curr_mainfold},dnames{curr_mainfold}),'_fits.fig']);
+    end
     %% ------------------------------------------------------------------------
     %  3D Tracking
     %  ------------------------------------------------------------------------
@@ -539,7 +554,8 @@ for curr_mainFold=1:numel(dnames)  % Loop each movie for guessing/fitting/tracki
         
         if yesphasemasks            % if phasemasks are used
             % plot 2D tracks
-            img=imread(fullfile(plocs{curr_mainfold},pnames{curr_mainfold},pexts{curr_mainfold}),'tif');
+            img=imread(fullfile(plocs{curr_mainfold},pnames{curr_mainfold},...
+                pexts{curr_mainfold}),'tif');
         else                        % if phasemasks aren't used
             img=m.phasemask;
         end
@@ -549,8 +565,9 @@ for curr_mainFold=1:numel(dnames)  % Loop each movie for guessing/fitting/tracki
         magfactor=1; %ceil(2e3/min(size(img)));
         img=kron(img,ones(magfactor));
         
-        % WRITE TRACKING FILE
+        % TRACKING
         fprintf(['tracking file named: ' dnames{curr_mainfold} '.\n'])
+        
         counter=0; yn=[];
         while counter<2         % two sequential agreements finish this loop
             
@@ -584,40 +601,40 @@ for curr_mainFold=1:numel(dnames)  % Loop each movie for guessing/fitting/tracki
             
             alpha=-log(trackparams(1))/trackparams(4);
             trfile=Track_3D2(goodfitdata,sROI,tROI,trackparams(1),...
-                alpha,trackparams(3),...
-                trackparams(5),trackparams(6),pxsize,trackparams(7),trackparams(2));
+                alpha,trackparams(3),trackparams(5),trackparams(6),...
+                pxsize,trackparams(7),trackparams(2));
             
             if isempty(trfile)
                 fprintf(['No available tracks for ''',dnames{curr_mainfold}...
                     '''. Check tracking parameters.\n']);
-            else
+            elseif yescheckvals
                 trfile=trfile*magfactor;
                 
                 hastrack=unique(trfile(:,1))';
                 cm=jet(numel(hastrack));
                 
-                h=figure('units','pixels');
+                pcolor(img); colormap('gray'); hold all
+                shading flat; axis image
+                
                 % Loop through each track
                 for trnum=hastrack % Loop through each track
                     tr_start_row=find(trfile(:,1)==trnum,1);
                     tr_end_row=find(trfile(:,1)==trnum,1,'last');
                     
                     % If the current track meets the length requirement.
-                    if (tr_end_row-tr_start_row+1)>=min_tr_length
+                    if (tr_end_row-tr_start_row+1)>=trackparams(5)
                         plot(trfile(tr_start_row:tr_end_row,4),...
                             trfile(tr_start_row:tr_end_row,5),...
                             'Color',cm(hastrack==trnum,:),...
                             'linewidth',1);
-                        hold on
                     end
                 end
-                ii=pcolor(img); colormap('gray');
-                set(ii,'edgecolor','none'); colormap('gray'); axis image
+                title([num2str(numel(hastrack)) ' tracks'])
+                hold off
                 
                 % WRITE 2D TRACKING FIG
                 saveas(gcf,[fullfile(dlocs{curr_mainfold},dnames{curr_mainfold}), '_2Dtracks.fig']);
-                if exist('h','var'); if ishandle(h); close(h); end; end
-                
+
                 if yes3d
                     % Plotting 3D tracks
                     
@@ -626,7 +643,8 @@ for curr_mainFold=1:numel(dnames)  % Loop each movie for guessing/fitting/tracki
                         tr_start_row=find(trfile(:,1)==trnum,1);
                         tr_end_row=find(trfile(:,1)==trnum,1,'last');
                         
-                        % If the current track meets the length requirement.
+                        % If the current track meets the length
+                        % requirement.
                         if (tr_end_row-tr_start_row+1)>=min_tr_length
                             plot3(trfile(tr_start_row:tr_end_row,4)*pxsize,...
                                 trfile(tr_start_row:tr_end_row,5)*pxsize,...
@@ -637,31 +655,38 @@ for curr_mainFold=1:numel(dnames)  % Loop each movie for guessing/fitting/tracki
                     end
                     grid on
                     % WRITE 3D TRACKING FIG
-                    saveas(gcf,[datalist{curr_mainFold}(1:end-4),'_3Dtracks.fig']);
+                    saveas(gcf,[datalist{curr_mainfold}(1:end-4),'_3Dtracks.fig']);
                     close
                 end
                 trfile=trfile/magfactor;
+                
             end
             
-            tpar.min_merit=trackparams(1);
-            tpar.itgtime=trackparams(2);
-            tpar.gamma=trackparams(3);
-            tpar.max_step_size=trackparams(4);
-            tpar.min_tr_length=trackparams(5);
-            tpar.speed_boxcar_halfsize=trackparams(6);
-            tpar.timedelay=trackparams(7);
-            
-            display(tpar)
-            yn=input(['input new tracking parameters?\n enter for ''no'', '...
-                'the parameters for ''yes''. \n two sequential ''nos'' means '...
-                'it''s good to go.\n']);
+            % end while loop if not checking values
+            if ~yescheckvals
+                counter=2;
+            else
+                % prompt user for parameter changes
+                dlgPrompt={'minimum merit', 'integration time',...
+                    'gamma','maximum step size','minimum track length',...
+                    'half size of speed boxcar','time delay'};
+                dlgTitle='Tracking';
+                numDlgLines=[1,length(dlgTitle)+10];
+                def={num2str(trackparams(1)),num2str(trackparams(2)),...
+                    num2str(trackparams(3)),num2str(trackparams(4)),...
+                    num2str(trackparams(5)),num2str(trackparams(6)),...
+                    num2str(trackparams(7))};
+                opts.WindowStyle='normal';
+                
+                yn=cellfun(@str2double,inputdlg(dlgPrompt,dlgTitle,numDlgLines,def,opts))';
+            end
         end
         m.trackfile=trfile;
         m.trackparams=trackparams;
     end
     
     % Output ViewFit Files for the Current Movie (If Selected)
-    if ismember(curr_mainFold,viewfits_mv)||isinf(viewfits_mv)
+    if ismember(curr_mainfold,viewfits_mv)||isinf(viewfits_mv)
         % Output ViewFits frames if the fit file is not empty
         if numel(goodfitdata)>0
             fprintf(['\nGenerating ViewFits frames for ''',...
@@ -678,7 +703,6 @@ for curr_mainFold=1:numel(dnames)  % Loop each movie for guessing/fitting/tracki
     end
 end
 end
-
 function Viewfits3(vidloc,fitfile1,guesses,trfile,half_symbol_size,framerate)
 
 % This code takes in raw single-molecule tif frames and fits files and
@@ -783,7 +807,6 @@ end
 
 close(wobj);
 end
-
 function currentframe=makebox(currentframe,curr_fr_maxint,...
     pix_x,pix_y,half_symbol_size,sz)
 
@@ -885,7 +908,6 @@ view([0,90])
 saveas(gcf, fname);
 close (fits_3D);
 end
-
 function [cell_xy,good_cell]=select_cells(PhaseMask)
 
 % Let user click on the phase mask of cell images to decide which cell to
@@ -945,8 +967,4 @@ else % If the user hits "Enter" directly, use all cells.
     good_cell=1:max(PhaseMask(:));
 end
 close(cell_fig_h);
-end
-
-function closewaitbar(h)
-if ishandle(h1); close(h); end
 end
