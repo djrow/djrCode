@@ -1,4 +1,4 @@
-function trfile=masterfit2(mainfold,yescheckvals,yesfitting)
+function goodfitdata=masterfit2(mainfold,yescheckvals,yesfitting)
 % mainfold should have nd2 files or tiff stacks. if there are phasemask tiff
 % files, they should correspond 1:1 with the nd2 files. the outputs written
 % to disk are a 2Dtracks.fig, fits.fig, _analysis.mat, and a binary version
@@ -21,7 +21,7 @@ function trfile=masterfit2(mainfold,yescheckvals,yesfitting)
 % yesfitting=0;
 
 % run tracking?
-yestracking=1;
+yestracking=0;
 
 % use phasemasks?
 yesphasemasks=0;
@@ -60,7 +60,7 @@ phaseparams=[1,0,2,0,100,10000];
 
 % Parameters for peak guessing, in the format of [noise size, particle
 % size, Intensity Threshold, H-Max, lzero]. usually [1,10,2e3,1e4,5]
-peak_guessing_params=[1,10,200,5e3,0];
+peak_guessing_params=[1,10,200,5e3,10];
 
 % Minimal separation of peaks (px). Putative peaks that are closer than
 % this value will be discarded unless it is the brightest one compared to
@@ -295,8 +295,10 @@ for curr_mainfold=1:numel(dnames)  % Loop each movie for guessing/fitting/tracki
     skippedframes={};
     if any(cellfun(@strcmp,mnamelist,repmat({'goodfitdata'},...
             [numel(mnamelist),1])))==0||yesfitting==1
-        % Display movie folder counter
-        fprintf(['Fitting this movie: ',dnames{curr_mainfold},'\n'])
+        if yesplot
+            % Display movie folder counter
+            fprintf(['Fitting this movie: ',dnames{curr_mainfold},'\n'])
+        end
         if yescheckvals==1
             frameskip=0;
             h1=waitbar(0,'fittin stuff');
@@ -566,7 +568,9 @@ for curr_mainfold=1:numel(dnames)  % Loop each movie for guessing/fitting/tracki
         img=kron(img,ones(magfactor));
         
         % TRACKING
-        fprintf(['tracking file named: ' dnames{curr_mainfold} '.\n'])
+        if yesplot
+            fprintf(['tracking file named: ' dnames{curr_mainfold} '.\n'])
+        end
         
         counter=0; yn=[];
         while counter<2         % two sequential agreements finish this loop
@@ -607,7 +611,7 @@ for curr_mainfold=1:numel(dnames)  % Loop each movie for guessing/fitting/tracki
             if isempty(trfile)
                 fprintf(['No available tracks for ''',dnames{curr_mainfold}...
                     '''. Check tracking parameters.\n']);
-            elseif yescheckvals
+            elseif yesplot
                 trfile=trfile*magfactor;
                 
                 hastrack=unique(trfile(:,1))';
