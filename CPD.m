@@ -51,6 +51,11 @@ for kk=1:numel(trFileName)
                 indvec1=indvec2(1:end-1);
                 indvec2=indvec2(2:end);
             end
+            
+            whichbad=trfile(indvec2,2)-trfile(indvec1,2)~=jj;
+            indvec1(whichbad)=[];
+            indvec2(whichbad)=[];
+            
             temp{counter,jj}=sum((trackii(indvec1,4:5)-trackii(indvec2,4:5)).^2,2);
         end
     end
@@ -102,8 +107,6 @@ for ii=1:max_tau
         set(gca,'XTickLabel',[])
     end
 end
-
-
 end
 %% ------------------------------------------------------------------------
 %  Available CPD Model Functions
