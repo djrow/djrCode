@@ -1,4 +1,4 @@
-function [msds,msds95]=CPD(trFileName)
+function msds=CPD(trFileName)
 max_tau=5;
 nMobile=1;
 nImmobile=0;
@@ -75,7 +75,7 @@ for ii=1:max_tau
     
     mdl=fitnlm(sqsteps{ii},ranks{ii},cpdfun,pstart);
     msds(ii,:)=mdl.Coefficients{:,1};
-    
+        
     cpdfxn=cpdfun(msds(ii),sqsteps{ii});
     residual=ranks{ii}-cpdfxn(:);
     
@@ -85,8 +85,7 @@ for ii=1:max_tau
     %  plotting CPD at specified tau
     if ismember(ii,plot_tau)
         color_ind=color_ind+1;
-        
-        
+                
         % Plot CPDs
         subplot(50,1,1:40)
         semilogx(sqsteps{ii},ranks{ii},'.','Color',cmap(color_ind,:),...
