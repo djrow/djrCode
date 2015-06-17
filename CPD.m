@@ -1,4 +1,4 @@
-function msds=CPD(trFileName)
+function msds=CPD(trfile)
 max_tau=5;
 nMobile=1;
 nImmobile=0;
@@ -26,16 +26,20 @@ if ~nargin
     if ~iscell(trFileName)
         trFileName={trFileName};
     end
+else
+    trFileName={'manual input'};
 end
 
 temp=cell(1,max_tau); counter=0;
 for kk=1:numel(trFileName)
-    m1=matfile([trFileLoc,filesep,trFileName{kk}]);
-    try
-        trfile=m1.trfile;
-    catch
-        display([trFileName{kk} ' does not include tracking data. Skipping'])
-        continue
+    if ~nargin
+        m1=matfile([trFileLoc,filesep,trFileName{kk}]);
+        try
+            trfile=m1.trfile;
+        catch
+            display([trFileName{kk} ' does not include tracking data. Skipping'])
+            continue
+        end
     end
     
     for ii=unique(trfile(:,1))'
