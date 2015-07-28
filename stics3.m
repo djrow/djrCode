@@ -9,60 +9,73 @@ function timecorr=stics3(imstack,mask,maxtau,whichfun)
 
 %%
 
-imstack=double(imstack);
 vidsize=[size(imstack),1];
 
 if ~exist('whichfun','var')
     whichfun=[];
 end
 
-if ~exist('mask','var')
-    mask=ones(vidsize(1:2));
+if ~exist('maxtau','var')
+    maxtau=20;
 end
-mask=logical(mask);
 
-vidmean=mean(imstack(:));
+if isempty(mask)
+    mask=true(vidsize(1:2));
+end
 
 fun{1}=@(x,y)pixremfun(x,y);    % remove pixels outside mask
 fun{2}=@(x,y)fremfun(x,y);      % remove stationary objects via fft
+fun{3}=@(x,y)padmean(x,y);      % pad every image with its mean
 
 % apply filters in arbitrary order
 for ii=whichfun(whichfun~=4)
     imstack=fun{ii}(imstack,mask);
 end
 
-imstack=imstack-mean(imstack(:));
-
 % do all the time correlations
 if any(whichfun==4)     % nonoverlapping
-    vfft=fft2(imstack,2*vidsize(1)+1,2*vidsize(2)+1);
+    vfft=fft2(imstack);
     
-    timecorr=zeros(size(vfft,1),size(vfft,2),maxtau);
+    timecorr=zeros(size(vfft,1),size(vfft,2),maxtau+1);
+    
+    timecorr(:,:,1)=mean(bsxfun(@times,real(fftshift(fftshift(...
+        ifft2(vfft.*conj(vfft)),1),2)),...
+        1./mean(mean(imstack))./mean(mean(imstack))),3);
     for kk=1:maxtau
         ind1=1:kk:vidsize(3);
         ind2=ind1(2:end);
         ind1=ind1(1:end-1);
-        timecorr(:,:,kk)=mean(real(fftshift(fftshift(...
-            ifft2(vfft(:,:,ind2).*conj(vfft(:,:,ind1))),1),2)),3);
+        timecorr(:,:,kk+1)=mean(bsxfun(@times,real(fftshift(fftshift(...
+            ifft2(vfft(:,:,ind2).*conj(vfft(:,:,ind1))),1),2)),...
+            1./mean(mean(imstack(:,:,ind1)))./mean(mean(imstack(:,:,ind2)))),3);
     end
-    timecorr=timecorr/numel(vfft(:,:,1));
+    timecorr=timecorr/numel(vfft(:,:,1))-1;
     
 else                    % overlapping
-    famps=abs(fft(fft(fft(imstack,2*vidsize(1)+1,1),2*vidsize(2)+1,2),[],3)).^2;
+        
+    famps=abs(fft(fft(fft(imstack,[],1),[],2),[],3)).^2;
     timecorr=fftshift(fftshift(real(ifft(ifft(ifft(famps...
-        ,[],1),[],2),[],3)),1),2)/numel(famps);
-    timecorr(:,:,1)=[];
+        ,[],1),[],2),[],3)),1),2)/numel(famps)/mean(imstack(:))^2-1;
+    timecorr=timecorr(:,:,1:maxtau+1);
+%     timecorr(:,:,1)=[];
 end
 
 end
 
 function imstack=pixremfun(imstack,mask)
 % display('removing noise pixels')
+imsize=size(imstack);
 
-nframes=size(imstack,3);
-mmean=imstack(mask(:,:,ones(1,nframes)));
+% replace pixels outside the mask with the average value inside the mask in
+% each frame
+mmean=mean(reshape(imstack(mask(:,:,ones(1,imsize(3)))),[],imsize(3)));
 
-imstack(~mask(:,:,ones(1,nframes)))=mean(mmean(:));
+% replace pixels outside the mask with the average value on the border of
+% each frame
+% indmat=padarray(false(imsize(1:2)-2),[1,1],true);
+% mmean=mean(reshape(imstack(indmat(:,:,ones(1,imsize(3)))),[],imsize(3)));
+
+imstack(~mask(:,:,ones(1,imsize(3))))=mmean(ones(1,sum(~mask(:))),:);
 end
 
 function imstack=fremfun(imstack,mask) %#ok<INUSD>
@@ -77,16 +90,25 @@ function imstack=fremfun(imstack,mask) %#ok<INUSD>
 % be removed.
 % tstatmax=1/fmin;                  % 15 seconds
 
-immean=mean(imstack(:));
-% imsize=size(imstack);
+% immean=mean(imstack(:));
+imsize=size(imstack);
 
-imstack=fft(double(imstack-immean),2*size(imstack,3)+1,3);
+imstack=fft(imstack-mean(imstack(:)),2*imsize(3)+1,3);
 
-% plot(linspace(0,2/.01,imsize(3)),squeeze(mean(mean(imstack(:,:,1:imsize(3))))))
+% plot(linspace(0,2/.01,imsize(3)),squeeze(mean(mean(abs(imstack(:,:,1:imsize(3)))))))
 
 imstack(:,:,1)=0;
 
-imstack=real(ifft(imstack,[],3))+immean;
-imstack=imstack(:,:,1:(size(imstack,3)-1)/2);
+imstack=real(ifft(imstack,[],3));
+imstack=imstack(1:imsize(1),1:imsize(2),1:imsize(3));
 % plot(squeeze(mean(mean(imstack,1),2))-1)
+end
+
+function imstack=padmean(imstack,mask)
+imstack=mat2cell(imstack,size(imstack,1),size(imstack,2),ones(1,size(imstack,3)));
+imm=cellfun(@(x)mean(mean(x(mask))),imstack,'uniformoutput',false);
+
+imstack=cellfun(@(x,y)padarray(x,floor(size(x)/2),y),imstack,imm,...
+    'uniformoutput',false);
+imstack=cat(3,imstack{:});
 end

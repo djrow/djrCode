@@ -1,12 +1,13 @@
 function output=masterstics(checkvals,mainfold)
 
-output.msdparams=[];
+output.msdp=[];
+
 if ~exist('mainfold','var')
     mainfold=pwd;
 end
 
 % select cells from phase mask?
-phasemasks=1;
+phasemasks=0;
 
 % skip the selection of cells from the phase mask
 skipselect=0;
@@ -15,94 +16,103 @@ skipselect=0;
 yesstics=0;
 
 % run gaussian fitting?
-% yesgauss=1;
+yesgauss=0;
 
-% filters: 1: 2: 3: 4: 5: non-overlapping
-sticsfilters=[1,2,4];
+% show gaussian fits?
+showgauss=1;
+
+% filters: 1: 2: 3: 4: non-overlapping time lags; 5:
+sticsfilters=[1,3];
 
 % which fitting parameters for the correlation gaussian fit?
 % 156 is independently variable amplitude and two widths.
 % with offset 0 and specified rotation angle.
-gfittype=156;
+gfittype=123456;
+widths=find(num2str(gfittype)=='5'|num2str(gfittype)=='6');
 
 % parameters for phase mask finding. dilate factor, low thresh, high thres,
 % autofill, min area, max area
 phaseparams=[2,0,.9,1,500,1000];
 
 % maximum frame separation to consider for msd
-maxtau=10;
+maxtau=20;
 
 mpp=.049;
 % inttime=.04;
 
-if yesstics==1
-    display('Select the movies.')
-    [datalist,dataloc,findex]=uigetfile([mainfold filesep '*.nd2;*.tif*;*.bin'],...
-        'Matlab Files','multiselect','on');
-    
-    if findex==0
-        fprintf('no data selected\n')
-        return
-    end
-    
-    if ~iscell(datalist); datalist={datalist}; end
-    for ii=1:numel(datalist); datalist{ii}=[dataloc datalist{ii}]; end
-    [dlocs,dnames,dexts]=cellfun(@fileparts,datalist,'uniformoutput',false);
-    
-    % WRITE BIN FILES FOR ALL MOVIES
-    for ii=1:numel(dnames);
-        if strcmp(dexts{ii},'.nd2')||strcmp(dexts{ii},'.tif')||strcmp(dexts{ii},'.tiff')
-            writebin(fullfile(dlocs{ii},[dnames{ii},dexts{ii}]));
-        end
-    end
-else
-    fprintf('select the analysis files.\n')
-    [datalist,dataloc,findex]=uigetfile([mainfold filesep '*.mat'],...
-        'Matlab Files','multiselect','on');
-    
-    if findex==0
-        fprintf('no data selected\n')
-        return
-    end
-    
-    if ~iscell(datalist); datalist={datalist}; end
-    for ii=1:numel(datalist); datalist{ii}=[dataloc datalist{ii}(1:end-13)]; end
-    [dlocs,dnames,~]=cellfun(@fileparts,datalist,'uniformoutput',false);
+%% locate and prepare data
+[datalist,dataloc,findex]=uigetfile([mainfold filesep ...
+    '*.nd2;*.tif*;*.bin;*.xls*'],...
+    'Matlab Files','multiselect','on');
+
+if findex==0
+    fprintf('no data selected\n')
+    return
 end
 
-% WRITE PHASEMASKS FILE FOR ALL MOVIES
-if phasemasks==1&&yesstics==1&&checkvals==1
-    display('Select the phase images.')
-    [phaselist,phaselistloc,findex]=uigetfile([mainfold filesep...
-        '*.nd2;*.tif*;*.bin'],'Matlab Files','multiselect','on');
-    if findex==0
-        fprintf('no phase images selected. try again.\n')
-        return
-    end
+if ~iscell(datalist); datalist={datalist}; end
+for ii=1:numel(datalist); datalist{ii}=[dataloc datalist{ii}]; end
+[dlocs,dnames,dexts]=cellfun(@fileparts,datalist,'uniformoutput',false);
+
+infomat=zeros(numel(dlocs),5);
+if all(cellfun(@(x)~isempty(regexp(x,regexptranslate('wildcard','*xls*'), 'once')),dexts))
+    [infomat,textdat]=xlsread(fullfile(dlocs{1},[dnames{1},dexts{ii}]));
+    textdat=textdat(2:end,1:3);
     
-    if ~iscell(phaselist); phaselist={phaselist}; end
-    for ii=1:numel(phaselist); phaselist{ii}=[phaselistloc phaselist{ii}]; end
-    [plocs,pnames,pexts]=cellfun(@fileparts,phaselist,'uniformoutput',false);
+    dlocs=textdat(:,2);
+    dnames=textdat(:,1);
+end
+if yesstics==1
+    % WRITE BIN FILES FOR ALL MOVIES
+    for ii=1:numel(dnames);
+        if strcmp(dexts,'.nd2')||strcmp(dexts,'.tif')||strcmp(dexts,'.tiff')
+            writebin(fullfile(dlocs{ii},[dnames{ii},dexts]));
+        end
+    end
+end
+
+%% WRITE PHASEMASKS FILE FOR ALL MOVIES
+if phasemasks&&yesstics&&checkvals
+    if all(cellfun(@(x) regexp(x,regexptranslate('wildcard','*xls*')),dexts))
+        plocs=dlocs;
+        pnames=dnames;
+        pext='.tif';
+        
+    else
+        display('Select the phase images.')
+        [phaselist,phaselistloc,findex]=uigetfile([mainfold filesep...
+            '*.nd2;*.tif*;*.bin'],'Matlab Files','multiselect','on');
+        if findex==0
+            fprintf('no phase images selected. try again.\n')
+            return
+        end
+        
+        if ~iscell(phaselist); phaselist={phaselist}; end
+        for ii=1:numel(phaselist); phaselist{ii}=[phaselistloc phaselist{ii}]; end
+        [plocs,pnames,pext]=cellfun(@fileparts,phaselist,'uniformoutput',false);
+    end
     
     for ii=1:numel(dnames)
         m=matfile([fullfile(dlocs{ii},dnames{ii}),'_analysis.mat'],'Writable',true);
         
-        if strcmp(pexts{ii},'.nd2')||strcmp(pexts{ii},'.tif')||strcmp(pexts{ii},'.tiff')
-            writebin(phaselist{ii});
-            img=bingetframes(fullfile(plocs{ii},pnames{ii},'.bin'));
-        else
-            img=bingetframes(fullfile(plocs{ii},[pnames{ii},pexts{ii}]));
+        if strcmp(pext,'.tif')||strcmp(pext,'.tiff')
+            img=imread(fullfile(plocs{ii},[pnames{ii},pext]),1,...
+                'Info',imfinfo(fullfile(plocs{ii},[pnames{ii},pext])));
+            
+        elseif strcmp(pext,'.nd2')
+            vidid=bfGetReader(fullfile(plocs{ii},[pnames{ii},pext]));
+            img=bfGetPlane(vidid,ii);
+        end
+        
+        mnamelist=who(m); mnamelist=mnamelist(:);
+        if any(cellfun(@strcmp,mnamelist,repmat({'phaseparams'},...
+                [numel(mnamelist),1])))
+            phaseparams=m.phaseparams;
         end
         
         fprintf(['phasing file named: ' dnames{ii} '.\n'])
         counter=0;
         while counter<2
-            
-            mnamelist=who(m); mnamelist=mnamelist(:);
-            if any(cellfun(@strcmp,mnamelist,repmat({'phaseparams'},...
-                    [numel(mnamelist),1])))&&counter==0
-                phaseparams=m.phaseparams;
-            end
             
             if exist('yn','var')&&~isempty(yn)
                 phaseparams=yn;
@@ -125,14 +135,14 @@ if phasemasks==1&&yesstics==1&&checkvals==1
                 'the parameters for ''yes''. \n two sequential ''nos'' means '...
                 'it''s good to go.\n']);
         end
-        if skipselect==0
+        if ~skipselect
             [~,goodcells]=select_cells(phasemask,img);
             phasemask(logical(-1*(ismember(phasemask,goodcells)-1)))=0;
         end
         m.phasemask=phasemask;
         m.phaseparams=phaseparams;
     end
-elseif yesstics==1&&checkvals==1
+elseif yesstics&&checkvals
     for ii=1:numel(dnames)
         [~,~,sz]=bingetframes([fullfile(dlocs{ii},dnames{ii}),'.bin'],1,[]);
         m=matfile([fullfile(dlocs{ii},dnames{ii}),'_analysis.mat'],'Writable',true);
@@ -142,133 +152,255 @@ elseif yesstics==1&&checkvals==1
     end
 end
 
-for jj=1:numel(dnames)  % Loop each movie for sticsing
-    if checkvals==1
-        return          % no need to run any more code
-    end
-    if yesstics==0
-        break           % continue to the fitting shenanigans
-    end
-    
-    % Display movie folder counter
-    fprintf(['Working on this movie: ',dnames{jj},'\n'])
-    
-    m=matfile([fullfile(dlocs{jj},dnames{jj}),'_analysis.mat'],'Writable',true);
-    phmask=m.phasemask;
-    ncells=unique(phmask); ncells(ncells==0)=[];
-    
-    timecorrsave=cell(1,numel(ncells));
-    for ii=ncells(:)'
+if checkvals==1
+    return          % no need to run any more code
+end
+
+if yesstics
+    %% perform STICS
+    parfor jj=1:numel(dnames)  % Loop each movie for sticsing
         
-        sphmask=phmask==ii;
+        % Display movie folder counter
+        fprintf(['Working on this movie: ',dnames{jj},'\n'])
         
-        roiinds=zeros(sum(double(sphmask(:))),2);
-        [roiinds(:,1),roiinds(:,2)]=find(sphmask);
-        roi=[min(roiinds(:,1)),min(roiinds(:,2)),...
-            max(roiinds(:,1)),max(roiinds(:,2))];
+        m=matfile([fullfile(dlocs{jj},dnames{jj}),'_analysis.mat'],'Writable',true);
+        phmask=m.phasemask;
+        ncells=unique(phmask); ncells(ncells==0)=[];
         
-        % use phmask to assign the correct portion of phmask to another
-        % variable, pm2
-        sphmask=sphmask(roi(1):roi(3),roi(2):roi(4));
-        
-        [~,n]=bingetframes([fullfile(dlocs{jj},dnames{jj}),'.bin'],1,roi);
-        
-        % max working data set size: 1 gigabyte/(8 bytes/double)
-        maxdoubles=1e9/8;
-        
-        % movie is quadroupled in size due to fft padding
-        potsize=n*(roi(3)-roi(1))*(roi(4)-roi(2))*4;
-        
-        % number of movie subdivisions
-        nbins=ceil(potsize/maxdoubles);
-        
-        % number of frames in each subdivision
-        binsize=floor(n/nbins);
-        
-        fprintf(['cross-correlating cell ', num2str(ii), ' of ' num2str(max(ncells)), '.\n'])
-        if nbins>1
+        timecorrsave=cell(1,sum(ncells>0));
+        thet=zeros(1,sum(ncells>0));
+        leng=zeros(1,sum(ncells>0));
+        nframes=zeros(1,sum(ncells>0));
+        sphmask=cell(1,sum(ncells>0));
+        counter=0;
+        for ii=ncells(:)'
+            counter=counter+1;
             
-            timecorr=cell(1,nbins);
-            for kk=1:nbins
-                fnums=1+binsize*(kk-1):binsize*kk;
-                v=bingetframes([fullfile(dlocs{jj},dnames{jj}),'.bin'],fnums,roi);
-                timecorr{kk}=stics3(v,sphmask,10,sticsfilters);
+            sphmask{counter}=phmask==ii;
+            
+            roiinds=zeros(sum(double(sphmask{counter}(:))),2);
+            [roiinds(:,1),roiinds(:,2)]=find(sphmask{counter});
+            roi=[min(roiinds(:,1)),min(roiinds(:,2)),...
+                max(roiinds(:,1)),max(roiinds(:,2))];
+            
+            % use phmask to assign the correct portion of phmask to another
+            % variable, pm2
+            sphmask{counter}=sphmask{counter}(roi(1):roi(3),roi(2):roi(4));
+            
+            [~,n]=bingetframes([fullfile(dlocs{jj},dnames{jj}),'.bin'],1,roi);
+            
+            % max working data set size: 1 gigabyte/(8 bytes/double)
+            maxdoubles=1e8/8;
+            
+            % movie is quadroupled in size due to fft padding
+            potsize=n*(roi(3)-roi(1))*(roi(4)-roi(2))*4;
+            
+            % number of movie subdivisions
+            nbins=ceil(potsize/maxdoubles);
+            
+            % number of frames in each subdivision
+            binsize=floor(n/nbins);
+            
+            fprintf(['cross-correlating cell ', num2str(counter), ' of ' num2str(max(ncells)), '.\n'])
+            if nbins>1
+                
+                timecorr=cell(1,nbins);
+                for kk=1:nbins
+                    fnums=1+binsize*(kk-1):binsize*kk;
+                    v=bingetframes([fullfile(dlocs{jj},dnames{jj}),'.bin'],fnums,roi);
+                    timecorr{kk}=stics3(double(v),sphmask{counter},maxtau,sticsfilters);
+                end
+                
+                timecorr=mean(cat(4,timecorr{:}),4);
+            else
+                
+                v=bingetframes([fullfile(dlocs{jj},dnames{jj}),'.bin'],[],roi);
+                timecorr=stics3(double(v),imdilate(sphmask{counter},ones(2)),maxtau,sticsfilters);
             end
             
-            timecorr=mean(cat(4,timecorr{:}),4);
-        else
+            % use cyldist to find the cell's orientation and length
+            [~,p,~,l]=cyldist(roiinds);
+            thet(counter)=-atan(p(1)/p(2));
+            leng(counter)=l-phaseparams(1)*2*mpp;
             
-            v=bingetframes([fullfile(dlocs{jj},dnames{jj}),'.bin'],[],roi);
-            timecorr=stics3(v,sphmask,10,[1,2,4]);
+            timecorrsave{counter}=timecorr;
+            nframes(counter)=n;
         end
         
-        % use cyldist to find the cell's orientation and length
-        [~,p,~,l]=cyldist(roiinds);
-        thet(ii)=-atan(p(1)/p(2));
-        leng(ii)=l-phaseparams(1)*2*mpp;
+        % WRITE RESULTS TO ANALYSIS FILE
+        m.tcorr=timecorrsave;
+        m.thet=thet;
+        m.leng=leng;
+        m.sticsfilters=sticsfilters;
+        m.sphmask=sphmask;
+        m.nframes=nframes;
+    end
+end
+counter=0;
+%% fit the correlations
+if yesgauss
+    for ii=1:numel(dnames)                % loop through movies
+        m=matfile([fullfile(dlocs{ii},dnames{ii}),'_analysis.mat'],'Writable',true);
+        fprintf(['Fitting the correlations from this movie: ',dnames{ii},'\n'])
         
-        timecorrsave{ii}=timecorr;
+        tcorr=m.tcorr;
+        thet=m.thet;
+        sphmask=m.sphmask;
+        sphmask=sphmask(cellfun(@(x)~isempty(x),sphmask));
+        
+        pgauss=zeros(numel(tcorr),maxtau,numel(num2str(gfittype)));
+        p95=pgauss;
+        nrmse=zeros(numel(tcorr),maxtau);
+        for jj=find(cellfun(@(x)~isempty(x),tcorr)) % loop through cells in a movie
+            counter=counter+1;
+            
+            % pad the phase mask to make it the size of the correlation func
+            %         phmask=m.phasemask;
+            bphmask=padarray(sphmask{jj},floor((size(tcorr{jj}(:,:,1))-size(sphmask{jj}))/2));
+            if size(bphmask,1)<size(tcorr{jj},1)
+                bphmask=padarray(bphmask,[1,0],'pre');
+            end
+            if size(bphmask,2)<size(tcorr{jj},2)
+                bphmask=padarray(bphmask,[0,1],'pre');
+            end
+            
+            res=zeros([size(tcorr{jj}(:,:,1)),maxtau]);
+            for kk=1:size(tcorr{jj},3)-1  % loop through time lags
+                workingcorr=tcorr{jj}(:,:,kk+1);
+                workingcorr(~bphmask)=nan;
+                
+                [pgauss(jj,kk,:),p95(jj,kk,:),nrmse(jj,kk),res(:,:,kk)]=...
+                    gaussfit(workingcorr,gfittype,thet(jj));
+                
+            end
+            ampandwidths=find(num2str(gfittype)=='1'|num2str(gfittype)=='5'|...
+                num2str(gfittype)=='6');
+            pgauss(jj,:,ampandwidths)=abs(pgauss(jj,:,ampandwidths));
+            
+            if showgauss
+                im1=tcorr{jj}(:,:,2); im1(~bphmask)=nan;
+                im2=tcorr{jj}(:,:,maxtau); im2(~bphmask)=nan;
+                r1=res(:,:,1); r1(~bphmask)=nan;
+                r2=res(:,:,maxtau); r2(~bphmask)=nan;
+                
+                subplot(321); pcolor(im1);
+                title('data')
+                axis image; shading flat
+                cl=get(gca,'clim');
+                
+                subplot(322); pcolor(r1);
+                title('residuals')
+                axis image; shading flat
+                cl=cl-min(cl)+nanmin(r1(:));
+                set(gca,'clim',cl);
+                
+                subplot(323); pcolor(im2);
+                title('data')
+                axis image; shading flat
+                cl=cl-min(cl)+nanmin(im2(:));
+                set(gca,'clim',cl);
+                
+                subplot(324); pcolor(r2);
+                title('residuals')
+                axis image; shading flat
+                cl=cl-min(cl)+nanmin(r2(:));
+                set(gca,'clim',cl);
+                
+                subplot(3,2,5:6)
+                scatter(1:size(pgauss,2),squeeze(pgauss(jj,:,6).^2*2*.049^2),'fill')
+                axis tight
+            end
+        end
+        
+        m.pgauss=pgauss;
+        m.nrmse=nrmse;
+        m.p95=p95;
     end
-    
-    % WRITE RESULTS TO ANALYSIS FILE
-    m.tcorr=timecorrsave;
-    m.thet=thet;
-    m.leng=leng;
-    m.sticsfilters=sticsfilters;
 end
 
-for ii=1:numel(dnames)                % loop through movies
-    m=matfile([fullfile(dlocs{ii},dnames{ii}),'_analysis.mat'],'Writable',true);
-    
-    tcorr=m.tcorr;
-    thet=m.thet;
-    
-    pgauss=zeros(numel(tcorr),size(tcorr{1},3),numel(num2str(gfittype)));
-    for jj=1:numel(tcorr)             % loop through cells in a movie
-        workingcorr=tcorr{jj};
-        if isempty(workingcorr)
-            continue
-        end
-        for kk=1:size(workingcorr,3)  % loop through time lags
-            [pgauss(jj,kk,:),~,nrmse(jj,kk)]=gaussfit(workingcorr(:,:,kk),gfittype,0,thet(jj));
-        end
-    end
-    
-    m.pgauss=pgauss;
-    m.nrmse=nrmse;
-end
+%% select data
 
-%% fit the average msd curve
-fprintf('fitting gaussians.\n')
-msds=cell(1,numel(dnames));
-for jj=1:numel(dnames)
+% load data
+msds=cell(1,numel(dlocs));
+cellLengths=cell(1,numel(dlocs));
+infomatCell=cell(1,numel(dlocs));
+nrmse=cell(1,numel(dlocs));
+p95=cell(1,numel(dlocs));
+nframes=cell(1,numel(dlocs));
+
+fprintf('loading msd data\n')
+parfor jj=1:numel(dlocs)
     m=matfile([fullfile(dlocs{jj},dnames{jj}),'_analysis.mat']);
-    pgauss=m.pgauss;
-    nrmse=m.nrmse;
+    msds{jj}=m.pgauss.^2*2*mpp^2;
+    cellLengths{jj}=m.leng;
+    nrmse{jj}=m.nrmse;
+    p95{jj}=m.p95;
+    nframes{jj}=m.nframes;
+    infomatCell{jj}=infomat(jj*ones(1,size(nframes{jj},2)),:);
     
-    missingcells=all(all(pgauss==0,2),3);
-    pgauss(find(missingcells),:,:)=[];
+%     missingcells=all(all(pgauss==0,2),3);
+%     ltemp(missingcells)=[];
+%     pgauss(find(missingcells),:,:)=[];
+%     ntemp(missingcells)=[];
     
-    msds{jj}=pgauss(:,:,[2,3]).^2*2*mpp^2;
-end
-meanmsds=squeeze(mean(cat(1,msds{:})));
-
-inttime=input('enter the integration time in seconds: ');
-tau=(1:maxtau)*inttime;
-cs=[.5,1];
-for ii=1:2
-    pstart=[cs(ii),1,.0384];
-    mdl=fitnlm(tau,meanmsds(1:maxtau,ii),@confmodel,pstart);
-    msdparams(ii,:)=abs(mdl.Coefficients{:,1});
-    
-    subplot(1,2,ii)
-    plot(tau,meanmsds(1:maxtau,ii));
-    hold all
-    plot(tau,confmodel(msdparams(ii,:),tau))
-    hold off
+%     msds{jj}=pgauss(:,:,widths).^2*2*mpp^2;
+%     cellLengths{jj}=ltemp;
+%     nframes{jj}=ntemp;
 end
 
-output.msdparams=msdparams;
+cellLengths=cat(2,cellLengths{:})';
+nrmse=cat(1,nrmse{:});
+p95=cat(1,p95{:});
+nframes=cat(2,nframes{:})';
+
+infomat=cat(1,infomatCell{:});
+infomat=cat(2,infomat,cellLengths);
+
+msds=cat(1,msds{:});
+
+%% fit msds
+maxtau=15;
+msdp=zeros(size(infomat,1),3,1);
+dest=zeros(size(infomat,1),1);
+msdp95=zeros(size(infomat,1),3,1);
+fprintf('fitting msds\n')
+parfor jj=1:floor(size(infomat,1))
+    inttime=infomat(jj,1)*.001;
+    tau=(1:maxtau)*inttime;
+    pstart=[cellLengths(jj)-.5,5,.0384];
+    y=msds(jj,1:maxtau,2);
+    
+    lb=[0,0,0]; ub=[100,200,100];
+    
+    %     mdl=fitnlm(tau,y,@confmodel,pstart);
+    %     msdp(jj,:,1)=abs(mdl.Coefficients{:,1});
+    
+    [x,~,resid,~,~,~,jaco]=lsqcurvefit(@confmodel,pstart,tau,y,lb,ub);
+    
+    msdp95(jj,:)=diff(nlparci(x,resid,'jacobian',jaco),1,2);
+    
+    msdp(jj,:)=x;
+    
+    dest(jj,1)=(y(2)-y(1))/4/inttime;
+    %     msdp95(jj,:,1)=diff(coefCI(mdl),[],2);
+    
+%     scatter(tau,y,'fill'); hold all
+%     plot(tau,confmodel(msdp(jj,:),tau),'linewidth',2); hold off
+%     plot(tau,confmodel(pstart,tau),'--'); hold off
+    
+
+end
+
+% pstart=[2,5,.0384];
+% mdl=fitnlm(tau(~isnan(meanmsd)),meanmsd(~isnan(meanmsd)),@confmodel,pstart);
+% meanmsdp=abs(mdl.Coefficients{:,1});
+
+output.msdp=msdp;
+output.dEstimate=dest;
+output.msdp95=msdp95;
+output.nframes=nframes;
+output.cellLengths=cellLengths;
+output.inttime=infomat(:,1)*.001;
 end
 
 function z=confmodel(p,x)

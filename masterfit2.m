@@ -21,7 +21,7 @@ function goodfitdata=masterfit2(mainfold,yescheckvals,yesfitting)
 % yesfitting=0;
 
 % run tracking?
-yestracking=0;
+yestracking=1;
 
 % use phasemasks?
 yesphasemasks=0;
@@ -31,7 +31,7 @@ yesphasemasks=0;
 skipselect=0;
 
 % plot things?
-yesplot=0;
+yesplot=1;
 
 % run 3d code?
 yes3d=0;
@@ -52,7 +52,7 @@ offset=1000;
 % movie to output the ViewFits frames. Use "inf" if you want all movies to
 % generate ViewFits frames. Example, 'viewfits = [1 3]' will tell the code
 % to output ViewFits frames for the 1st and the 3rd movie.
-viewfits_mv=0;
+viewfits_mv=1;
 
 % parameters for phase mask finding. dilate factor, low thresh, high thres,
 % autofill, min area, max area

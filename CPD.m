@@ -6,11 +6,12 @@ function [dmeas,dmeas95]=CPD(trfile)
 % with one input, which is the particular tracking file you want to
 % analyze.
 
-max_tau=5;          % maximum time lag in frames
+max_tau=10;         % maximum time lag in frames
 inttime=.04;        % integration time in seconds
+mpp=.049;           % pixel size in microns in the object plane
 
 % number and type of terms in the CPD fit
-nMobile=2;
+nMobile=1;
 nImmobile=0;
 cpdstart=[];        % leave blank unless you know what you're doing
 
@@ -32,7 +33,7 @@ dim=2;
 [msdfun,msdstart]=msd_function(msdModel,msdstart);
 
 % which taus to plot in the cpd fit result figure
-plot_tau=[1,2,3];
+plot_tau=1:10;
 
 % get the locations and names of all the analysis files
 if ~nargin
@@ -59,7 +60,7 @@ for kk=1:numel(trFileName)
     if ~nargin
         m1=matfile([trFileLoc,filesep,trFileName{kk}]);
         try
-            trfile=m1.trfile;
+            trfile=m1.trackfile;
         catch
             display([trFileName{kk} ' does not include tracking data. Skipping'])
             continue
@@ -89,7 +90,7 @@ for kk=1:numel(trFileName)
             
             % nansum because there are nans as placeholders
             temp{counter,jj}=nansum((fixedtrack(indvec1,4:5)-...
-                fixedtrack(indvec2,4:5)).^2,2);
+                fixedtrack(indvec2,4:5)).^2,2)*mpp^2;
         end
     end
 end
@@ -102,14 +103,15 @@ ranks=cellfun(@(x)linspace(0,1,numel(x))',sqsteps,'uniformoutput',0);
 
 color_ind=0;
 for ii=1:max_tau
-    if numel(ranks{ii})<minTrLength
+    try
+        mdl=fitnlm(sqsteps{ii},ranks{ii},cpdfun,cpdstart);
+        msds(ii,:)=abs(mdl.Coefficients{:,1});
+    catch
+        fprintf(['time lag number ' num2str(ii) ' failed to produce an msd value\n'])
         continue
     end
     
-    mdl=fitnlm(sqsteps{ii},ranks{ii},cpdfun,cpdstart);
-    msds(ii,:)=mdl.Coefficients{:,1};
-    
-    cpdfxn=cpdfun(msds(ii),sqsteps{ii});
+    cpdfxn=cpdfun(msds(ii,:),sqsteps{ii});
     residual=ranks{ii}-cpdfxn(:);
     
     % Create colormap for plotting raw CPD data
@@ -126,8 +128,8 @@ for ii=1:max_tau
         hold all
         
         % Plot fitted lines
-        semilogx(sqsteps{ii},cpdfxn,'-','color','k','Linewidth',2,...
-            'HandleVisibility','off')
+%         semilogx(sqsteps{ii},cpdfxn,'-','color','k','Linewidth',2,...
+%             'HandleVisibility','off')
         
         % Plot residuals
         subplot(50,1,41:50)
@@ -140,7 +142,7 @@ for ii=1:max_tau
     end
 end
 
-tau=inttime:inttime:maxtau*inttime;
+tau=(1:max_tau)*inttime;
 dmeas=nan(nMobile,numel(msdstart));
 for ii=nMobile+nImmobile:numel(cpdstart)-nImmobile
     y=msds(:,ii);

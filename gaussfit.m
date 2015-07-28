@@ -1,4 +1,4 @@
-function [p,p95,nrmse]=gaussfit(data,usedparameters,plotres,ang)
+function [p,p95,nrmse,resid,funval]=gaussfit(data,usedparameters,ang)
 % hw=10;
 % data=data(floor(size(data,1)/2-hw)+1:floor(size(data,1)/2+hw)+1,...
 %     floor(size(data,2)/2-hw)+1:floor(size(data,2)/2+hw)+1);
@@ -10,7 +10,7 @@ function [p,p95,nrmse]=gaussfit(data,usedparameters,plotres,ang)
 % find(data==data<tmax/2+tmax/1e2&data>tmax/2-tmax/1e2)
 
 % pstart=[(nanmax(data(:))-nanmin(data(:)))/2,nanmin(data(:)),size(data)/2,20,20,0,nanmax(data(:))/2,10];
-pstart=[nanmax(data(:))-1,1,0,0,10,20,0,nanmax(data(:))/2,10];
+pstart=[nanmax(data(:))-nanmin(data(:)),nanmin(data(:)),0,0,10,20,0,nanmax(data(:))/2,10];
 
 [x,y]=ndgrid(1:size(data,1),1:size(data,2));
 x=x-1-floor(size(data,1)/2);
@@ -70,7 +70,7 @@ elseif usedparameters==156
     pstart=pstart([1,5,6]);
     
 elseif usedparameters==1256
-    % offset of 0, centered
+    % centered
     if ~exist('ang','var')
         ang=0;
     end
@@ -101,25 +101,7 @@ p=mdl.Coefficients{:,1};
 p95=diff(coefCI(mdl),1,2);
 nrmse=mdl.RMSE/numel(data)/p(1);
 
-if plotres==1
-    funval=reshape(fun(p,xdata),size(x));
-    startfunval=reshape(fun(pstart,xdata),size(x));
-    
-    subplot(131); pcolor(data);
-    title('data')
-    axis image; shading flat
-    cl=get(gca,'clim');
-    
-    subplot(132); pcolor(startfunval);
-    title('startfit')
-    axis image; shading flat
-    
-    subplot(133); pcolor(data-funval);
-    title('residuals')
-    axis image; shading flat
-    cl=cl-min(cl)+min(data(:)-funval(:));
-    set(gca,'clim',cl);
-    
-    keyboard
-end
+startfunval=reshape(fun(pstart,xdata),size(x));
+funval=reshape(fun(p,xdata),size(x));
+resid=data-funval;
 end
