@@ -21,14 +21,18 @@ function goodfitdata=masterfit2(mainfold,yescheckvals,yesfitting)
 % yesfitting=0;
 
 % run tracking?
-yestracking=1;
+yestracking=0;
 
 % use phasemasks?
 yesphasemasks=0;
 
+% if you're happy with the phasemask inside the analysis files, don't make
+% another one
+happywithphasemask=1;
+
 % skip selecting cells from phase mask? this choice is skipped if
 % yesphasemasks is false
-skipselect=0;
+skipselect=1;
 
 % plot things?
 yesplot=1;
@@ -52,15 +56,15 @@ offset=1000;
 % movie to output the ViewFits frames. Use "inf" if you want all movies to
 % generate ViewFits frames. Example, 'viewfits = [1 3]' will tell the code
 % to output ViewFits frames for the 1st and the 3rd movie.
-viewfits_mv=1;
+viewfits_mv=0;
 
 % parameters for phase mask finding. dilate factor, low thresh, high thres,
 % autofill, min area, max area
-phaseparams=[1,0,2,0,100,10000];
+phaseparams=[1,0,1,0,100,10000];
 
 % Parameters for peak guessing, in the format of [noise size, particle
 % size, Intensity Threshold, H-Max, lzero]. usually [1,10,2e3,1e4,5]
-peak_guessing_params=[1,10,200,5e3,10];
+peak_guessing_params=[2,10,1e4,1e3,10];
 
 % Minimal separation of peaks (px). Putative peaks that are closer than
 % this value will be discarded unless it is the brightest one compared to
@@ -202,7 +206,7 @@ if yesbgroundsub
 end
 
 % WRITE PHASEMASKS FILE FOR ALL MOVIES
-if yesphasemasks&&yesfitting&&yescheckvals&&ischar(mainfold)
+if yesphasemasks&&ischar(mainfold)
     display('Select the phase images.')
     [phaselist,phaselistloc,findex]=uigetfile([mainfold filesep...
         '*.nd2;*.tif*;*.bin'],'Matlab Files','multiselect','on');
@@ -214,33 +218,34 @@ if yesphasemasks&&yesfitting&&yescheckvals&&ischar(mainfold)
     if ~iscell(phaselist); phaselist={phaselist}; end
     for ii=1:numel(phaselist); phaselist{ii}=[phaselistloc phaselist{ii}]; end
     [plocs,pnames,pexts]=cellfun(@fileparts,phaselist,'uniformoutput',false);
-    
+end
+
+if yesphasemasks&&yesfitting&&yescheckvals&&ischar(mainfold)
     for ii=1:numel(dnames)
         m=matfile([fullfile(dlocs{ii},dnames{ii}),'_analysis.mat'],'Writable',true);
         
-        if strcmp(pexts{ii},'.nd2')||strcmp(pexts{ii},'.tif')||strcmp(pexts{ii},'.tiff')
-            writebin(phaselist{ii});
-            img=bingetframes(fullfile(plocs{ii},pnames{ii},'.bin'));
+        
+        mnamelist=who(m); mnamelist=mnamelist(:);
+        if any(cellfun(@strcmp,mnamelist,repmat({'phasemask'},...
+                [numel(mnamelist),1])))&&happywithphasemask
+            continue
+        end
+        if any(cellfun(@strcmp,mnamelist,repmat({'phaseparams'},...
+                [numel(mnamelist),1])))
+            phaseparams=m.phaseparams;
+        end
+        
+        if strcmp(pexts{ii},'.nd2')
+            vidid=bfGetReader(phaselist{ii});
+            img=bfGetPlane(vidid,ii);
         else
-            img=bingetframes(fullfile(plocs{ii},[pnames{ii},pexts{ii}]));
+            img=imread(fullfile(plocs{ii},[pnames{ii},pexts{ii}]));
         end
         
         fprintf(['phasing file named: ' dnames{ii} '.\n'])
+        
         counter=0;
-        while counter<2
-            
-            mnamelist=who(m); mnamelist=mnamelist(:);
-            if any(cellfun(@strcmp,mnamelist,repmat({'phaseparams'},...
-                    [numel(mnamelist),1])))&&counter==0
-                phaseparams=m.phaseparams;
-            end
-            
-            if exist('yn','var')&&~isempty(yn)
-                phaseparams=yn;
-            else
-                counter=counter+1;
-            end
-            
+        while counter<1
             phasemask=valley(img(:,:,1),phaseparams,yescheckvals);
             
             % prompt user for parameter changes
@@ -254,8 +259,13 @@ if yesphasemasks&&yesfitting&&yescheckvals&&ischar(mainfold)
                 num2str(phaseparams(5)),num2str(phaseparams(6))};
             opts.WindowStyle='normal';
             
-            yn=cellfun(@str2double,inputdlg(dlgPrompt,dlgTitle,numDlgLines,def,opts))';
+            phaseparams_new=cellfun(@str2double,inputdlg(dlgPrompt,dlgTitle,numDlgLines,def,opts))';
             
+            if all(phaseparams_new~=phaseparams)
+                phaseparams=phaseparams_new;
+            else
+                counter=counter+1;
+            end
         end
         if ~skipselect
             [~,goodcells]=select_cells(phasemask,img);
@@ -405,6 +415,7 @@ for curr_mainfold=1:numel(dnames)  % Loop each movie for guessing/fitting/tracki
                         
                         raw_fitdata(:,13)=(raw_fitdata(:,3)>0).*... % Amplitude > amp error
                             (raw_fitdata(:,16)>raw_fitdata(:,17)).*... % width > error
+                            (raw_fitdata(:,5)>0).*... % background offset is positive
                             (raw_fitdata(:,8)<width_error_ub).*...
                             (raw_fitdata(:,17)<width_error_ub).*... % Width error < UB
                             (raw_fitdata(:,7)>width_lb).*...
@@ -556,8 +567,8 @@ for curr_mainfold=1:numel(dnames)  % Loop each movie for guessing/fitting/tracki
         
         if yesphasemasks            % if phasemasks are used
             % plot 2D tracks
-            img=imread(fullfile(plocs{curr_mainfold},pnames{curr_mainfold},...
-                pexts{curr_mainfold}),'tif');
+            img=imread(fullfile(plocs{curr_mainfold},[pnames{curr_mainfold},...
+                pexts{curr_mainfold}]),'tif');
         else                        % if phasemasks aren't used
             img=m.phasemask;
         end
@@ -912,7 +923,7 @@ view([0,90])
 saveas(gcf, fname);
 close (fits_3D);
 end
-function [cell_xy,good_cell]=select_cells(PhaseMask)
+function [cell_xy,good_cell]=select_cells(PhaseMask,img)
 
 % Let user click on the phase mask of cell images to decide which cell to
 % analyze subsequently
@@ -929,6 +940,9 @@ function [cell_xy,good_cell]=select_cells(PhaseMask)
 % good_cell: The indices of chosen cells
 
 cell_fig_h=figure;
+subplot(121);
+imshow(img,[],'Border','Tight');
+subplot(122);
 imshow(PhaseMask~=0,[],'Border','Tight');
 title(sprintf(['Left-click on cells to be analyzed.\n Press ''Enter'' to proceed.\n'...
     ' Or click return without clicking\n on any cell to analyze ALL of them.']))

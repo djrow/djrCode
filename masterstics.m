@@ -387,8 +387,6 @@ parfor jj=1:floor(size(infomat,1))
 %     scatter(tau,y,'fill'); hold all
 %     plot(tau,confmodel(msdp(jj,:),tau),'linewidth',2); hold off
 %     plot(tau,confmodel(pstart,tau),'--'); hold off
-    
-
 end
 
 % pstart=[2,5,.0384];

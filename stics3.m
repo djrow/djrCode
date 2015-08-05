@@ -57,40 +57,24 @@ else                    % overlapping
     timecorr=fftshift(fftshift(real(ifft(ifft(ifft(famps...
         ,[],1),[],2),[],3)),1),2)/numel(famps)/mean(imstack(:))^2-1;
     timecorr=timecorr(:,:,1:maxtau+1);
-%     timecorr(:,:,1)=[];
 end
 
 end
 
 function imstack=pixremfun(imstack,mask)
-% display('removing noise pixels')
 imsize=size(imstack);
 
 % replace pixels outside the mask with the average value inside the mask in
 % each frame
 mmean=mean(reshape(imstack(mask(:,:,ones(1,imsize(3)))),[],imsize(3)));
-
-% replace pixels outside the mask with the average value on the border of
-% each frame
-% indmat=padarray(false(imsize(1:2)-2),[1,1],true);
-% mmean=mean(reshape(imstack(indmat(:,:,ones(1,imsize(3)))),[],imsize(3)));
-
 imstack(~mask(:,:,ones(1,imsize(3))))=mmean(ones(1,sum(~mask(:))),:);
 end
 
 function imstack=fremfun(imstack,mask) %#ok<INUSD>
-% display('removing immobile artifacts')
-% plot(squeeze(mean(mean(imstack,1),2))); hold all
-
 % removing the time-invariant term sets the minimum frequency in the movie
 % to fmin, in frames per second.
 % fmin=1*2/movielengthinseconds;    % 1/15 1/s if the movie is 30 seconds long
 
-% which means that things that stay stationary for longer than 1/fmin will
-% be removed.
-% tstatmax=1/fmin;                  % 15 seconds
-
-% immean=mean(imstack(:));
 imsize=size(imstack);
 
 imstack=fft(imstack-mean(imstack(:)),2*imsize(3)+1,3);
