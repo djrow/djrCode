@@ -36,14 +36,19 @@ f_img=double(f_img);
 bp_img=bp_img.*logical(phmask);
 
 initwidth=2;        % Initial width (both x- and y-directions)
+
+% 2*fWidth+1 is the width of the fitting window
+fWidth=5;
+
 options=statset('MaxFunEvals',5000,'MaxIter',5000);
 
-gauss2dfunction_nlinfit_asym=@(p,x) p(2)+...
-    p(1).*exp(-(x(:,1)-p(4)).^2/(2*p(3).^2)-(x(:,2)-p(5)).^2/(2*p(6).^2));
-gauss2dfunction_nlinfit_sym=@(p,x) p(2)+...
-    p(1).*exp(-(x(:,1)-p(4)).^2/(2*p(3).^2)-(x(:,2)-p(5)).^2./(2*p(3).^2));
-testfun=@(p,x,y)p(2)+p(1).*...
-    exp(-(x-p(4)).^2/(2*p(3).^2)-(y-p(5)).^2/(2*p(6).^2));
+if sym
+    gfun=@(p,x)p(2)+p(1).*exp(-(x(:,1)-p(4)).^2/(2*p(3).^2)-...
+        (x(:,2)-p(5)).^2./(2*p(3).^2));
+elseif sym==2
+    gfun=@(p,x)p(2)+p(1).*exp(-(x(:,1)-p(4)).^2/(2*p(3).^2)-...
+        (x(:,2)-p(5)).^2/(2*p(6).^2));
+end
 
 [r,c,~]=find(bp_img);
 numguess=size(r,1);
@@ -67,10 +72,10 @@ for ii=1:numguess % Loop through each putative peak
     
     % Here the "bottom" is actually the top of the frame due to the
     % direction of the y-coordinate.
-    smallbottom=curry-min_sep;
-    smalltop=curry+min_sep;
-    smallleft=currx-min_sep;
-    smallright=currx+min_sep;
+    smallbottom=curry-fWidth;
+    smalltop=curry+fWidth;
+    smallleft=currx-fWidth;
+    smallright=currx+fWidth;
     
     % Make sure all boundaries of the small box lie inside the frame.
     if smallbottom<1; smallbottom=1; end
@@ -111,17 +116,13 @@ for ii=1:numguess % Loop through each putative peak
     linearsmallboxdata(:,2)=linear_r+smallbottom-1;
     
     %% PSF fitting with nlinfit
-    if sym==2 % Asymmetric Gaussian fitting
-        [fitparam,residuals,jacobian]=nlinfit(linearsmallboxdata(:,1:2),...
-            smallboxdata(:),gauss2dfunction_nlinfit_asym,initparam,options);
-    elseif sym==1 % Symmetric Gaussian fitting
-        [fitparam,residuals,jacobian]=nlinfit([linearsmallboxdata(:,1),...
-            linearsmallboxdata(:,2)],linearsmallboxdata(:,3),...
-            gauss2dfunction_nlinfit_sym,initparam,options);
-    end
+    [fitparam,residuals,jacobian]=nlinfit(linearsmallboxdata(:,1:2),...
+        smallboxdata(:),gfun,initparam,options);
     
-    %       % check fits?
+    % check fits?
     if skipshow==0
+        fval=reshape(gfun(fitparam,x,y),size(smallboxdata));
+        
         display(['The second image should be just the background noise in '...
             'the first one.'])
         subplot(1,1,1)
@@ -129,9 +130,9 @@ for ii=1:numguess % Loop through each putative peak
         set(a,'edgecolor','none')
         title('data')
         cm=get(gca,'clim'); axis image
-        subplot(2,1,2); a=pcolor(smallboxdata-testfun(fitparam,x,y));
+        subplot(2,1,2); a=pcolor(smallboxdata-fval);
         set(a,'edgecolor','none')
-        cm=cm-min(cm)+min(min(smallboxdata-testfun(fitparam,x,y)));
+        cm=cm-min(cm)+min(min(smallboxdata-fval));
         set(gca,'clim',cm); axis image
         display('These two columns should be similar: ')
         display(permute(cat(1,fitparam,initparam),[3,1,2]));
@@ -157,7 +158,7 @@ for ii=1:numguess % Loop through each putative peak
         all_fiterr(ii,:)=fiterr;
     elseif sym==1
         all_fitparam(ii,:)=[fitparam,fitparam(:,3),sum(smallboxdata(:))];
-        all_fiterr(ii,:)=[fiterr,fiterr(:,3)];
+        all_fiterr(ii,:)=[fiterr;fiterr(3,:)];
     end
 end
 guesses=cat(1,xcentroid,ycentroid);

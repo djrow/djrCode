@@ -15,11 +15,11 @@ nTerms=2;
 cpdstart=[];        % leave blank unless you know what you're doing
 
 % mean squared displacement model for MSD fit
-msdModel='unconfined'; % 'square confinement'
+msdModel='linear'; % 'square confinement'
 msdstart=[];        % leave blank unless you know what you're doing
 
 % use overlapping displacements?
-yesoverlap=1;
+yesoverlap=0;
 
 % minimum track length
 minTrLength=5;
@@ -32,10 +32,10 @@ dim=2;
 [msdfun,msdstart]=msd_function(dim,msdModel,msdstart);
 
 % which taus to plot in the cpd fit result figure
-plotTau=[1,2,5,4];%1:10;
+plotTau=[];%1:10;
 
 % which msds to plot
-plotMsds=[];% 1:nTerms;
+plotMsds=1:nTerms;
 
 % get the locations and names of all the analysis files
 if ~nargin
@@ -89,7 +89,7 @@ for kk=1:numel(trFileName)
         
         for jj=1:max_tau
             if yesoverlap                       % overlapping frame pairs
-                indvec1=jj+1:size(fixedtrack,1);
+                indvec1=jj:size(fixedtrack,1);
                 indvec2=1:size(fixedtrack,1)-jj;
             else                                % nonoverlapping frame pairs
                 indvec2=1:jj:size(fixedtrack,1);
@@ -164,7 +164,7 @@ for ii=nTerms:size(msds,1)
     end
     dMdl{ii}=fitnlm(tau(~isnan(y)),y(~isnan(y)),msdfun,msdstart);
     dmeas(ii,:)=dMdl{ii}.Coefficients{:,1};
-    dmeas95(ii,:)=diff(coefCI(dMdl{ii}),[],1);
+    dmeas95(ii,:)=diff(coefCI(dMdl{ii}),[],2);
     
     if ismember(ii,plotMsds)
         plot(tau,y,'.')
@@ -226,7 +226,7 @@ end
 function [fhandle,pstart]=msd_function(dim,model,pstart)
 
 switch model
-    case 'unconfined'
+    case 'linear'
         switch dim
             case 1
                 fhandle=@(p,x) 2*abs(p(1))*x+p(2);
