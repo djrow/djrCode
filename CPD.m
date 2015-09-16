@@ -1,25 +1,26 @@
-function [dmeas,dmeas95,dMdl,mMdl]=CPD(trfile)
+function [dmeas]=CPD(trfile)
 % computes msds from cumulative probability step size distributions, and
 % then fits the msds to a msd model to estimate the diffusion coefficients
 %
 % to use, run this without inputs and select the analysis files or run this
 % with one input, which is the particular tracking file you want to
 % analyze.
-
-max_tau=10;         % maximum time lag in frames
-inttime=.04;        % integration time in seconds
+opts=optimset('Display','off');
+maxTau=3;         % maximum time lag in frames
+intTime=.04;        % integration time in seconds
 mpp=.049;           % pixel size in microns in the object plane
 
 % number and type of terms in the CPD fit
-nTerms=2;
-cpdstart=[];        % leave blank unless you know what you're doing
+nDiffs=2;
+immPop=0;
+cpdStart=[]; %[.5,0,eps,.1,eps];        % leave blank unless you know what you're doing
 
 % mean squared displacement model for MSD fit
 msdModel='unconfined'; % 'square confinement'
-msdstart=[];        % leave blank unless you know what you're doing
+msdStart=[];        % leave blank unless you know what you're doing
 
 % use overlapping displacements?
-yesoverlap=1;
+yesOverlap=1;
 
 % minimum track length
 minTrLength=5;
@@ -28,16 +29,16 @@ minTrLength=5;
 dim=2;
 
 % choose the functions for fitting
-[cpdfun,cpdstart]=cpd_function(dim,nTerms,cpdstart);
-[msdfun,msdstart]=msd_function(dim,msdModel,msdstart);
+[cpdFun,cpdStart,cpdLB,cpdUB]=cpd_function(dim,nDiffs,immPop,cpdStart);
+[msdFun,msdStart,msdLB,msdUB]=msd_function(dim,msdModel,msdStart);
 
 % which taus to plot in the cpd fit result figure
-plotTau=[1,2,5,4];%1:10;
+plotTau=1:maxTau;   % 1:maxTau; % [];
 
 % which msds to plot
-plotMsds=[];% 1:nTerms;
+plotMsds=1:nDiffs;  % 1:nTerms; % [];
 
-% get the locations and names of all the analysis files
+%% get the locations and names of all the analysis files
 if ~nargin
     [trFileName,trFileLoc,idf]=uigetfile({'*.mat'},'Select analysis files.',...
         'MultiSelect','on');
@@ -45,16 +46,19 @@ if ~nargin
         display('no files chosen.')
         return
     end
+    
     % convert the name to a cell array if only one file is chosen
     if ~iscell(trFileName)
         trFileName={trFileName};
     end
+    
 else
     % if there's an input, don't load anything
     trFileName={'manual input'};
 end
 
-temp=cell(1,max_tau); counter=0;
+%% calculate and accumulate squared step sizes
+allSqSteps=cell(1,maxTau); counter=0;
 for kk=1:numel(trFileName)
     
     % if there's no input, load the files, if there's an input, just use
@@ -87,8 +91,8 @@ for kk=1:numel(trFileName)
         % remove leading nans
         fixedtrack(1:find(all(isnan(fixedtrack),2)==0,1,'first')-1,:)=[];
         
-        for jj=1:max_tau
-            if yesoverlap                       % overlapping frame pairs
+        for jj=1:maxTau
+            if yesOverlap                       % overlapping frame pairs
                 indvec1=jj+1:size(fixedtrack,1);
                 indvec2=1:size(fixedtrack,1)-jj;
             else                                % nonoverlapping frame pairs
@@ -98,29 +102,28 @@ for kk=1:numel(trFileName)
             end
             
             % nansum because there are nans as placeholders
-            temp{counter,jj}=nansum((fixedtrack(indvec1,4:5)-...
+            allSqSteps{counter,jj}=nansum((fixedtrack(indvec1,4:5)-...
                 fixedtrack(indvec2,4:5)).^2,2)*mpp^2;
         end
     end
 end
 
-sqsteps=cell(max_tau,1);
-for ii=1:max_tau
-    sqsteps{ii}=sort(cat(1,temp{:,ii}));
+sqSteps=cell(maxTau,1);
+for ii=1:maxTau
+    sqSteps{ii}=sort(cat(1,allSqSteps{:,ii}));
 end
-ranks=cellfun(@(x)linspace(0,1,numel(x))',sqsteps,'uniformoutput',0);
+ranks=cellfun(@(x)linspace(0,1,numel(x))',sqSteps,'uniformoutput',0);
 
+%% fit the cpd curves to get the msd values
 color_ind=0;
-for ii=1:max_tau
-    try
-        mMdl{ii}=fitnlm(sqsteps{ii},ranks{ii},cpdfun,cpdstart);
-    catch
-        fprintf(['time lag number ' num2str(ii) ' failed to produce an msd value\n'])
-        continue
-    end
-    msds(:,ii)=abs(mMdl{ii}.Coefficients{:,1});
+for ii=1:maxTau
     
-    cpdfxn=cpdfun(msds(:,ii),sqsteps{ii});
+    msds(:,ii)=lsqcurvefit(cpdFun,cpdStart,sqSteps{ii},ranks{ii},...
+        cpdLB,cpdUB,opts);
+    %         mMdl{ii}=fitnlm(sqSteps{ii},ranks{ii},cpdFun,cpdStart);
+    %     msds(:,ii)=abs(mMdl{ii}.Coefficients{:,1});
+    
+    cpdfxn=cpdFun(msds(:,ii),sqSteps{ii});
     residual=ranks{ii}-cpdfxn(:);
     
     % Create colormap for plotting raw CPD data
@@ -131,49 +134,68 @@ for ii=1:max_tau
         color_ind=color_ind+1;
         
         % Plot CPDs
-        subplot(50,1,1:40)
-        semilogx(sqsteps{ii},ranks{ii},'.','Color',cmap(color_ind,:),...
+        subplot(50,2,sub2ind([2,50],ones(1,40),1:40))
+        semilogx(sqSteps{ii},ranks{ii},'.','Color',cmap(color_ind,:),...
             'MarkerSize',8);
-        hold all
+        set(gca,'XTickLabel',[])
+        ylabel('Cumulative probability')
+        hold on
         
         % Plot fitted lines
-        semilogx(sqsteps{ii},cpdfxn,'-','color','k','Linewidth',2,...
+        semilogx(sqSteps{ii},cpdfxn,'-','color','k','Linewidth',2,...
             'HandleVisibility','off')
         
         % Plot residuals
-        subplot(50,1,41:50)
-        semilogx(sqsteps{ii},residual,'.','Color',cmap(color_ind,:),...
+        subplot(50,2,sub2ind([2,50],ones(1,10),41:50))
+        semilogx(sqSteps{ii},residual,'.','Color',cmap(color_ind,:),...
             'MarkerSize',4);
-        hold all
-        
-        subplot(50,1,1:40)
-        set(gca,'XTickLabel',[])
+        xlabel('Squared step size')
+        hold on
     end
 end
 
-tau=(1:max_tau)*inttime;
-dmeas=nan(nTerms,numel(msdstart));
-for ii=nTerms:size(msds,1)
+if any(ismember(1:maxTau,plotTau))
+    subplot(50,2,sub2ind([2,50],ones(1,40),1:40))
+    hold off
+    subplot(50,2,sub2ind([2,50],ones(1,10),41:50))
+    hold off
+end
+
+%% fit msds
+tau=(1:maxTau)*intTime;
+dmeas=nan(nDiffs,numel(msdStart));
+counter=0;
+for ii=nDiffs+2*immPop:size(msds,1)
+    counter=counter+1;
     y=msds(ii,:);
     if ~sum(~isnan(y))
         display(['diffusive population number ', ...
-            num2str(ii-nTerms+1), ' has no msd values'])
-        dmeas(ii,:)=nan(size(msdstart));
+            num2str(ii-nDiffs+1), ' has no msd values'])
+        dmeas(counter,:)=nan(size(msdStart));
         
         continue
     end
-    dMdl{ii}=fitnlm(tau(~isnan(y)),y(~isnan(y)),msdfun,msdstart);
-    dmeas(ii,:)=dMdl{ii}.Coefficients{:,1};
-    dmeas95(ii,:)=diff(coefCI(dMdl{ii}),[],1);
+%     dMdl{counter}=fitnlm(tau(~isnan(y)),y(~isnan(y)),msdFun,msdStart);
+%     dmeas(counter,:)=dMdl{counter}.Coefficients{:,1};
+%     dmeas95(counter,:)=diff(coefCI(dMdl{counter}),[],1);
+    dmeas(counter,:)=lsqcurvefit(msdFun,msdStart,tau,y,...
+        msdLB,msdUB,opts);
     
-    if ismember(ii,plotMsds)
-        plot(tau,y,'.')
+    if ismember(counter,plotMsds)
+        subplot(122)
+        scatter(tau,y,'fill')
         hold all
-        plot(tau,msdfun(dmeas(ii,:),tau),'--k')
+        plot(tau,msdFun(dmeas(counter,:),tau),'--k')
         ylabel('Mean Squared Displacement')
         xlabel('time lag')
+        
+        leg{2*(counter-1)+1}=num2str(dmeas(counter,1));
+        leg{2*(counter-1)+2}='fit';
     end
 end
+legend(leg)
+hold off
+
 dmeas=abs(dmeas);
 
 end
@@ -181,38 +203,53 @@ end
 %% ------------------------------------------------------------------------
 %  Available CPD Model Functions
 %  ------------------------------------------------------------------------
-function [fhandle,pstart]=cpd_function(dim,nTerms,pstart)
+function [fhandle,pstart,cpdLB,cpdUB]=cpd_function(dim,nDiffs,immPop,pstart)
 switch dim
     case 2
-        switch nTerms
+        switch immPop
             case 1
-                fhandle=@(p,sqr)1-exp(-sqr/abs(p(1)));
-                if isempty(pstart)
-                    pstart=.1;
+                switch nDiffs
+                    case 1
+                        fhandle=@(p,sqr)1-...
+                            p(1)*               exp(-sqr/(p(3)+p(2)))-...
+                            (1-p(1))*           exp(-sqr/p(2));
+                        if isempty(pstart)
+                            pstart=[.5,.01^2,1]; % 3
+                        end
+                        cpdLB=[0,0,0];
+                        cpdUB=[1,inf,inf];
+                        
+                    case 2
+                        fhandle=@(p,sqr)1-...
+                            p(1)*               exp(-sqr/(p(4)+p(3)))-...
+                            p(2)*               exp(-sqr/(p(5)+p(3)))-...
+                            (1-p(1)-p(2))*      exp(-sqr/p(3));
+                        if isempty(pstart)
+                            pstart=[.5,.5,eps,.1,.001]; % 4:5
+                        end
+                        cpdLB=[0,0,0,0,0];
+                        cpdUB=[1,1,inf,inf,inf];
                 end
-                
-            case 2
-                fhandle=@(p,sqr)1-mod(abs(p(1)),1)*exp(-sqr/abs(p(2)))-...
-                    (1-mod(abs(p(1)),1))*exp(-sqr/abs(p(3)));
-                if isempty(pstart)
-                    pstart=[.5,.1,eps];
-                end
-                
-            case 3
-                fhandle=@(p,sqr)1-abs(p(1))*exp(-sqr/abs(p(3)))-...
-                    abs(p(2))*exp(-sqr/abs(p(4)))-...
-                    (1-abs(p(1))-abs(p(2)))*exp(-sqr/abs(p(5)));
-                if isempty(pstart)
-                    pstart=[.3,.3,.1,.01,eps];
-                end
-                
-            case 4
-                fhandle=@(p,sqr)1-abs(p(1))*exp(-sqr/abs(p(4)))-...
-                    abs(p(2))*exp(-sqr/abs(p(5)))-...
-                    abs(p(3))*exp(-sqr/abs(p(6)))-...
-                    (1-abs(p(1))-abs(p(2))-abs(p(3)))*exp(-sqr/abs(p(7)));
-                if isempty(pstart)
-                    pstart=[.25,.25,.25,.1,.01,.001,eps];
+            case 0
+                switch nDiffs
+                    case 1
+                        fhandle=@(p,sqr)1-      exp(-sqr/p(1));
+                        if isempty(pstart)
+                            pstart=.1; % 1
+                        end
+                        cpdLB=0;
+                        cpdUB=inf;
+                        
+                    case 2
+                        fhandle=@(p,sqr)1-...
+                            p(1)*               exp(-sqr/p(2))-...
+                            (1-p(1))*           exp(-sqr/p(3));
+                        if isempty(pstart)
+                            pstart=[.5,.1,.001]; % 2:3
+                        end
+                        cpdLB=[0,0,0];
+                        cpdUB=[1,inf,inf];
+                        
                 end
         end
     case 1
@@ -223,19 +260,23 @@ end
 %% ------------------------------------------------------------------------
 %  Available MSD Model Functions
 %  ------------------------------------------------------------------------
-function [fhandle,pstart]=msd_function(dim,model,pstart)
+function [fhandle,pstart,msdLB,msdUB]=msd_function(dim,model,pstart)
 
 switch model
     case 'unconfined'
         switch dim
             case 1
-                fhandle=@(p,x) 2*abs(p(1))*x+p(2);
+                fhandle=@(p,x) 2*p(1)*x+p(2);
+                
             case 2
-                fhandle=@(p,x) 4*abs(p(1))*x+p(2);
+                fhandle=@(p,x) 4*p(1)*x+p(2);
+                
         end
         if isempty(pstart)
-            pstart=[.1,0];
+            pstart=[.001,0];
         end
+        msdLB=[0,-inf];
+        msdUB=[inf,inf];
         
     case 'square confinement'
         switch dim
@@ -247,6 +288,8 @@ switch model
         if isempty(pstart)
             pstart=[1,.1,0];
         end
+        msdLB=[0,0,-inf];
+        msdUB=[inf,inf,inf];
         
     otherwise
         display('mismelled the confinement model type')
@@ -258,21 +301,17 @@ end
 %% square confinement model
 function z=longmsd(p,x)
 % global camerasd
-p=abs(p);
-
 l=p(1); d=p(2); tau=x;
 
 summedterm=@(t,d,l,n)1/n^4*exp(-(n*pi/l).^2*d*t);
 
-temp=eps*ones(size(tau));% counter=0;
+temp=eps*ones(size(tau));
 for ii=1:2:2*400-1
     s=summedterm(tau,d,l,ii);
     if sum(s./temp)<1e-10
         break
     end
     temp=temp+s;
-    %     counter=counter+1;
 end
-% display(counter)
-z=l^2/3*(1-96/pi^4*temp)+p(3); %.0384;
+z=l^2/3*(1-96/pi^4*temp)+p(3);
 end
