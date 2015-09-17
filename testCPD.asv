@@ -1,9 +1,7 @@
 function [tr,caseInfo]=testCPD(dType)
 % use tr as the input into CPD to see if it gives you what you expect.
-% 
 % dType should either be a number from 1 to 8 or the caseInfo output from a
-% previous run. if dType is caseInfo then all the simulation parameters are
-% pulled from the dType structure.
+% previous run. if dType is a 
 
 % types of diffusion simulatable
 diffusionTitles{1}='one mobile no noise.';
