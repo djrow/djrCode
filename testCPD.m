@@ -23,17 +23,17 @@ if ~isstruct(dType)
     
     % diffusion coefficients in microns^2/s
     d1=1;
-    d2=.1;
+    d2=.01;
     
     % fraction of total steps taken by each diffusing population
-    d1Frac=1/3;
+    d1Frac=1/2;
     d2Frac=1/3;
     
     % camera integration time in seconds
     intTime=.04;
     
     % standard deviation of the noise in pixels
-    sdNoise=2;
+    sdNoise=1;
     
     % magnification of the microscope in microns/pixel
     mag=.049;
@@ -113,14 +113,14 @@ end
 % organize tracks for use in the CPD code
 tr=cellfun(@(x,n)organize(x,n),tr,num2cell(1:numel(tr)),'uniformoutput',0);
 
-% plot trajectories on top of each other
-for ii=1:numel(tr)
-    plot(tr{ii}(:,4),tr{ii}(:,5))
-    hold all
-end
-axis image
-hold off
-title(diffusionTitles{dType})
+% % plot trajectories on top of each other
+% for ii=1:numel(tr)
+%     plot(tr{ii}(:,4),tr{ii}(:,5))
+%     hold all
+% end
+% axis image
+% hold off
+% title(diffusionTitles{dType})
 
 % concatenate tracks into one matrix
 tr=cat(1,tr{:});
