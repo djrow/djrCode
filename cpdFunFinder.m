@@ -218,3 +218,39 @@ end
 % eHandle=@(p,tau,sqSteps)cellfun(@(x,y)cpdFun(x,y,p),...
 %     sqSteps,num2cell(msdFun(tau,p))','uniformoutput',0);
 end
+
+%% square confinement model
+function z=longmsd2d(p,x)
+% global camerasd
+d=p(1); l=p(2); tau=x;
+
+summedterm=@(t,d,l,n)1/n^4*exp(-(n*pi/l).^2*d*t);
+
+temp=eps*ones(size(tau));
+for ii=1:2:2*400-1
+    s=summedterm(tau,d,l,ii);
+    if sum(s./temp)<1e-10
+        break
+    end
+    temp=temp+s;
+end
+z=l^2/3*(1-96/pi^4*temp)+p(3);
+end
+
+%% square confinement model
+function z=longmsd1d(p,x)
+% global camerasd
+d=p(1); l=p(2); tau=x;
+
+summedterm=@(t,d,l,n)1/n^4*exp(-(n*pi/l).^2*d*t);
+
+temp=eps*ones(size(tau));
+for ii=1:2:2*400-1
+    s=summedterm(tau,d,l,ii);
+    if sum(s./temp)<1e-10
+        break
+    end
+    temp=temp+s;
+end
+z=l^2/6*(1-96/pi^4*temp)+p(3);
+end
