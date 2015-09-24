@@ -19,16 +19,20 @@ mpp=.049;
 % 4 different parameters each with 2 values = 2^4 different combos
 
 % diffusion dimensionality (1 or 2)
-dim=2;      % 1D step sizes cannot yet be calculated correctly
+dim=2;
+
+% direction of unit vector along the dimension you wish to consider (if
+% 1D), in radians
+dimAngle=pi/2;
 
 % number of diffusive populations in the CPD model (1 or 2)
 nDiffs=1;
 
 % presence or absence of immobile population (0 or 1)
-immPop=1;
+immPop=0;
 
 % diffusion model. ('confined' or 'unconfined')
-msdModel='unconfined';
+msdModel='confined';
 
 %% Algorithm parameters
 
@@ -41,7 +45,7 @@ yesOverlap=1;
 % minimum track length (integer)
 minTrLength=5;
 
-% starting values for the cpd fit. leave blank unless you know what you're doing
+% starting values for the fit. leave blank unless you know what you're doing
 pStart=[];
 
 % aux function
@@ -109,25 +113,32 @@ for kk=1:numel(trFileName)
         counter=counter+1;
         
         % fill in the time holes with nans. these two lines are genius!
-        fixedtrack=nan(max(trackii(:,2)),size(trackii,2));
-        fixedtrack(trackii(:,2),:)=trackii;
+        fixedTrack=nan(max(trackii(:,2)),size(trackii,2));
+        fixedTrack(trackii(:,2),:)=trackii;
         
         % remove leading nans
-        fixedtrack(1:find(all(isnan(fixedtrack),2)==0,1,'first')-1,:)=[];
+        fixedTrack(1:find(all(isnan(fixedTrack),2)==0,1,'first')-1,:)=[];
         
         for jj=1:maxTau
             if yesOverlap                       % overlapping frame pairs
-                indvec1=jj+1:size(fixedtrack,1);
-                indvec2=1:size(fixedtrack,1)-jj;
+                indvec1=jj+1:size(fixedTrack,1);
+                indvec2=1:size(fixedTrack,1)-jj;
             else                                % nonoverlapping frame pairs
-                indvec2=1:jj:size(fixedtrack,1);
+                indvec2=1:jj:size(fixedTrack,1);
                 indvec1=indvec2(1:end-1);
                 indvec2=indvec2(2:end);
             end
             
-            % nansum because there are nans as placeholders
-            allSqSteps{counter,jj}=nansum((fixedtrack(indvec1,4:5)-...
-                fixedtrack(indvec2,4:5)).^2,2)*mpp^2;
+            if dim==1
+                rTrack=nansum(bsxfun(@times,fixedTrack(:,4:5),...
+                    [cos(dimAngle),sin(dimAngle)]),2);
+                
+                allSqSteps{counter,jj}=(rTrack(indvec1)-rTrack(indvec2)).^2*mpp^2;
+            else
+                % nansum because there are nans as placeholders
+                allSqSteps{counter,jj}=nansum((fixedTrack(indvec1,4:5)-...
+                    fixedTrack(indvec2,4:5)).^2,2)*mpp^2;
+            end
         end
     end
 end

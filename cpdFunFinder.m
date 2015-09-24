@@ -16,12 +16,11 @@ switch dim
                                 cpdLB=[0,-inf];
                                 cpdUB=[inf,inf];
                             case 'confined' % 1 confined diffuser in 2D
-                                
                                 cpdFun=@(x,y,p)1-exp(-x./y);
-                                msdFun=@(tau,p)longmsd2d(p(1:3),tau);
+                                msdFun=@(tau,p)abs(longmsd2d(p(1:3),tau));
                                 
                                 if isempty(pstart)
-                                    pstart=[.1,.5,eps];
+                                    pstart=[.01,1,eps];
                                 end
                                 cpdLB=[0,0,-inf];
                                 cpdUB=[inf,inf,inf];
@@ -92,7 +91,7 @@ switch dim
                                 
                                 cpdFun=@(x,y,p)1-p(7)*exp(-x./(y+p(9)))-...
                                     p(8)*exp(-x./(y+p(9)))-(1-p(7)-p(8))*exp(-x./p(9));
-                                msdFun=@(tau,p)cat(1,longmsd2d(p(1:3),tau),longmsd(p(4:6),tau));
+                                msdFun=@(tau,p)cat(1,longmsd2d(p(1:3),tau),longmsd2d(p(4:6),tau));
                                 
                                 if isempty(pstart)
                                     pstart=[.1,.5,eps,.01,.5,eps,.3,.3,1e-3];
@@ -108,8 +107,8 @@ switch dim
                 switch nDiffs
                     case 1 % 1 diffuser
                         switch dType
-                            case 'unconfined' % 1 unconfined diffuser in 2D
-                                cpdFun=@(x,y,p)erf(sqrt(x./(2*y)));
+                            case 'unconfined' % 1 unconfined diffuser in 1D
+                                cpdFun=@(x,y,p)erf(sqrt(x./(2*abs(y))));
                                 msdFun=@(tau,p)2*p(1)*tau+p(2);
                                 
                                 if isempty(pstart)
@@ -117,8 +116,8 @@ switch dim
                                 end
                                 cpdLB=[0,-inf];
                                 cpdUB=[inf,inf];
-                            case 'confined' % 1 confined diffuser in 2D
-                                cpdFun=@(x,y,p)erf(sqrt(x./(2*y)));
+                            case 'confined' % 1 confined diffuser in 1D
+                                cpdFun=@(x,y,p)erf(sqrt(x./(2*abs(y))));
                                 msdFun=@(tau,p)longmsd1d(p(1:3),tau);
                                 
                                 if isempty(pstart)
@@ -129,9 +128,9 @@ switch dim
                         end
                     case 2 % 2 diffusers
                         switch dType
-                            case 'unconfined' % 2 unconfined diffusers in 2D
-                                cpdFun=@(x,y,p)p(5)*erf(sqrt(x./(2*y(1))))+...
-                                    (1-p(5))*erf(sqrt(x./(2*y(2))));
+                            case 'unconfined' % 2 unconfined diffusers in 1D
+                                cpdFun=@(x,y,p)p(5)*erf(sqrt(x./(2*abs(y(1)))))+...
+                                    (1-p(5))*erf(sqrt(x./(2*abs(y(2)))));
                                 msdFun=@(tau,p)cat(1,2*p(1)*tau+p(2),2*p(3)*tau+p(4));
                                 
                                 if isempty(pstart)
@@ -139,12 +138,12 @@ switch dim
                                 end
                                 cpdLB=[0,-inf,0,-inf,0];
                                 cpdUB=[inf,inf,inf,inf,1];
-                            case 'confined' % 2 confined diffusers in 2D
+                            case 'confined' % 2 confined diffusers in 1D
                                 
-                                cpdFun=@(x,y,p)p(7)*erf(sqrt(x./(2*y(1))))+...
+                                cpdFun=@(x,y,p)p(7)*erf(sqrt(x./(2*abs(y(1)))))+...
                                     (1-p(7))*erf(sqrt(x./(2*y(2))));
                                 msdFun=@(tau,p)cat(1,longmsd1d(p(1:3),tau),...
-                                    longmsd1d(p(4:6),tau));
+                                    longmsd2d(p(4:6),tau));
                                 
                                 if isempty(pstart)
                                     pstart=[.1,.5,eps,.01,.5,eps,.5];
@@ -157,8 +156,8 @@ switch dim
                 switch nDiffs
                     case 1 % 1 diffuser
                         switch dType
-                            case 'unconfined' % 1 unconfined diffuser with 1 immobile population in 2D
-                                cpdFun=@(x,y,p)p(3)*erf(sqrt(x./(2*(y+p(4)))))+...
+                            case 'unconfined' % 1 unconfined diffuser with 1 immobile population in 1D
+                                cpdFun=@(x,y,p)p(3)*erf(sqrt(x./(2*(abs(y)+p(4)))))+...
                                     (1-p(3))*erf(sqrt(x./(2*p(4))));
                                 msdFun=@(tau,p)2*p(1)*tau+p(2);
                                 
@@ -167,9 +166,9 @@ switch dim
                                 end
                                 cpdLB=[0,-inf,0,0];
                                 cpdUB=[inf,inf,1,inf];
-                            case 'confined' % 1 confined diffuser with 1 immobile population in 2D
+                            case 'confined' % 1 confined diffuser with 1 immobile population in 1D
                                 
-                                cpdFun=@(x,y,p)p(4)*erf(sqrt(x./(2*(y+p(5)))))+...
+                                cpdFun=@(x,y,p)p(4)*erf(sqrt(x./(2*(abs(y)+p(5)))))+...
                                     (1-p(4))*erf(sqrt(x./(2*p(5))));
                                 msdFun=@(tau,p)longmsd1d(p(1:3),tau);
                                 
@@ -181,9 +180,9 @@ switch dim
                         end
                     case 2 % 2 diffusers
                         switch dType
-                            case 'unconfined' % 2 unconfined diffusers with 1 immobile population in 2D
-                                cpdFun=@(x,y,p)p(5)*erf(sqrt(x./(2*(y+p(7)))))+...
-                                    p(6)*erf(sqrt(x./(2*(y+p(7)))))+...
+                            case 'unconfined' % 2 unconfined diffusers with 1 immobile population in 1D
+                                cpdFun=@(x,y,p)p(5)*erf(sqrt(x./(2*(abs(y)+p(7)))))+...
+                                    p(6)*erf(sqrt(x./(2*(abs(y)+p(7)))))+...
                                     (1-p(5)-p(6))*erf(sqrt(x./(2*p(7))));
                                 msdFun=@(tau,p)cat(1,2*p(1)*tau+p(2),2*p(3)*tau+p(4));
                                 
@@ -192,10 +191,10 @@ switch dim
                                 end
                                 cpdLB=[0,-inf,0,-inf,0,0,0];
                                 cpdUB=[inf,inf,inf,inf,1,1,inf];
-                            case 'confined' % 2 confined diffusers with 1 immobile population in 2D
+                            case 'confined' % 2 confined diffusers with 1 immobile population in 1D
                                 
-                                cpdFun=@(x,y,p)p(7)*erf(sqrt(x./(2*(y+p(9)))))+...
-                                    p(8)*erf(sqrt(x./(2*(y+p(9)))))+...
+                                cpdFun=@(x,y,p)p(7)*erf(sqrt(x./(2*(abs(y)+p(9)))))+...
+                                    p(8)*erf(sqrt(x./(2*(abs(y)+p(9)))))+...
                                     (1-p(7)-p(8))*erf(sqrt(x./(2*p(9))));
                                 msdFun=@(tau,p)cat(1,longmsd1d(p(1:3),tau),longmsd1d(p(4:6),tau));
                                 
