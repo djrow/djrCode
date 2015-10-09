@@ -21,10 +21,10 @@ function goodfitdata=masterfit2(mainfold,yescheckvals,yesfitting)
 % yesfitting=0;
 
 % run tracking?
-yestracking=0;
+yestracking=1;
 
 % use phasemasks?
-yesphasemasks=0;
+yesphasemasks=1;
 
 % if you're happy with the phasemask inside the analysis files, don't make
 % another one
@@ -32,7 +32,7 @@ happywithphasemask=1;
 
 % skip selecting cells from phase mask? this choice is skipped if
 % yesphasemasks is false
-skipselect=1;
+skipselect=0;
 
 % plot things?
 yesplot=1;
@@ -56,7 +56,7 @@ offset=1000;
 % movie to output the ViewFits frames. Use "inf" if you want all movies to
 % generate ViewFits frames. Example, 'viewfits = [1 3]' will tell the code
 % to output ViewFits frames for the 1st and the 3rd movie.
-viewfits_mv=0;
+viewfits_mv=[1];
 
 % parameters for phase mask finding. dilate factor, low thresh, high thres,
 % autofill, min area, max area
@@ -64,14 +64,14 @@ phaseparams=[1,0,1,0,100,10000];
 
 % Parameters for peak guessing, in the format of [noise size, particle
 % size, Intensity Threshold, H-Max, lzero]. usually [1,10,2e3,1e4,5]
-peak_guessing_params=[2,10,1e4,1e3,10];
+peak_guessing_params=[1,10,200,10,10];
 
 % Minimal separation of peaks (px). Putative peaks that are closer than
 % this value will be discarded unless it is the brightest one compared to
 % its neighbors. Also, this is the half box size of the fitting region,
 % i.e., if 'min_sep = 10', pixel intensities within a 21-by-21 square
 % region will be used in PSF fitting.
-min_sep=10;
+min_sep=5;
 
 % Lower and upper bounds (in pixels, except for the aspect ratio) for
 % various fit parameters that will be used to determine whether a fit is
@@ -100,12 +100,12 @@ indRefr_corr=0.79;
 % (See comments from the 'Track_3D.m' code for the meaning of each
 % paramter)
 timedelay=0; % Time delay between consecutive frames (ms)
-itgtime=10; % Integration time (ms)
+itgtime=40; % Integration time (ms)
 min_merit=0.1;
-max_step_size=1e2;
+max_step_size=8;
 alpha=-log(min_merit)/max_step_size;
-gamma=0;
-min_tr_length=5;
+gamma=3;
+min_tr_length=3;
 speed_boxcar_halfsize=1;
 
 trackparams(1)=min_merit;
@@ -132,7 +132,8 @@ if yes3d
     end
 end
 
-if yesfitting&&ischar(mainfold)
+% find all the relevant files
+if yesfitting&&ischar(mainfold)         % fitting and folder location string given as input
     display('Select the movies.')
     [datalist,dataloc,findex]=uigetfile([mainfold filesep '*.nd2;*.tif*;*.bin'],...
         'Matlab Files','multiselect','on');
@@ -152,7 +153,7 @@ if yesfitting&&ischar(mainfold)
             writebin(fullfile(dlocs{ii},[dnames{ii},dexts{ii}]));
         end
     end
-elseif ~yesfitting&&ischar(mainfold)
+elseif ~yesfitting&&ischar(mainfold)    % not fitting and folder location string given as input
     display('Select the analysis files.')
     [datalist,dataloc,findex]=uigetfile([mainfold filesep '*.mat'],...
         'Matlab Files','multiselect','on');
@@ -164,12 +165,13 @@ elseif ~yesfitting&&ischar(mainfold)
     
     if ~iscell(datalist); datalist={datalist}; end
     for ii=1:numel(datalist); datalist{ii}=[dataloc datalist{ii}]; end
-    [dlocs,dnames,dexts]=cellfun(@fileparts,datalist,'uniformoutput',false);
-elseif isstruct(mainfold)
-    [dlocs,dnames,dexts]=fileparts(mainfold.name);
+    [dlocs,dnames,~]=cellfun(@fileparts,datalist,'uniformoutput',false);
+    for ii=1:numel(datalist); dnames{ii}(end-8:end)=[]; end
+elseif isstruct(mainfold)               % folder location string is actually a stucture
+    [dlocs,dnames,~]=fileparts(mainfold.name);
     dlocs={dlocs};
     dnames={dnames};
-    dexts={dexts};
+    %     dexts={dexts};
 end
 
 % WRITE BACKGROUND SUBTRACTED BINARY FILE
@@ -261,7 +263,7 @@ if yesphasemasks&&yesfitting&&yescheckvals&&ischar(mainfold)
             
             phaseparams_new=cellfun(@str2double,inputdlg(dlgPrompt,dlgTitle,numDlgLines,def,opts))';
             
-            if all(phaseparams_new~=phaseparams)
+            if any(phaseparams_new~=phaseparams)
                 phaseparams=phaseparams_new;
             else
                 counter=counter+1;
@@ -305,10 +307,10 @@ for curr_mainfold=1:numel(dnames)  % Loop each movie for guessing/fitting/tracki
     skippedframes={};
     if any(cellfun(@strcmp,mnamelist,repmat({'goodfitdata'},...
             [numel(mnamelist),1])))==0||yesfitting==1
-        if yesplot
-            % Display movie folder counter
-            fprintf(['Fitting this movie: ',dnames{curr_mainfold},'\n'])
-        end
+        
+        % Display movie folder counter
+        fprintf(['Fitting this movie: ',dnames{curr_mainfold},'\n'])
+        
         if yescheckvals==1
             frameskip=0;
             h1=waitbar(0,'fittin stuff');
@@ -649,7 +651,7 @@ for curr_mainfold=1:numel(dnames)  % Loop each movie for guessing/fitting/tracki
                 
                 % WRITE 2D TRACKING FIG
                 saveas(gcf,[fullfile(dlocs{curr_mainfold},dnames{curr_mainfold}), '_2Dtracks.fig']);
-
+                
                 if yes3d
                     % Plotting 3D tracks
                     
@@ -750,7 +752,7 @@ guesses=cellfun(@round,guesses,'uniformoutput',0);
 
 wobj=VideoWriter([vidloc(1:end-4),'_Viewfits'],'MPEG-4');
 wobj.FrameRate=framerate;
-wobj.Quality=90;
+wobj.Quality=95;
 % wobj.CompressionRatio=20; % for 'Motion JPEG 2000' codec
 
 magfactor=ceil(150/min(sz)); % movie should have 150 pixels across

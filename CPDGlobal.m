@@ -1,4 +1,5 @@
-function [x,BIC]=CPDGlobal(trfile)
+function [x,BIC]=CPDGlobal(trfile,nDiffs,immPop,msdModel)
+% example: x=CPDGlobal(testCPD(2),1,0,'unconfined');
 % computes msds from cumulative probability step size distributions, and
 % then fits the msds to a msd model to estimate the diffusion coefficients
 %
@@ -22,17 +23,17 @@ mpp=.049;
 dim=2;
 
 % direction of unit vector along the dimension you wish to consider (if
-% 1D), in radians
+% dim=1), in radians
 dimAngle=pi/2;
 
 % number of diffusive populations in the CPD model (1 or 2)
-nDiffs=1;
+% nDiffs=1;
 
 % presence or absence of immobile population (0 or 1)
-immPop=0;
+% immPop=0;
 
 % diffusion model. ('confined' or 'unconfined')
-msdModel='confined';
+% msdModel='unconfined';
 
 %% Algorithm parameters
 
@@ -133,11 +134,11 @@ for kk=1:numel(trFileName)
                 rTrack=nansum(bsxfun(@times,fixedTrack(:,4:5),...
                     [cos(dimAngle),sin(dimAngle)]),2);
                 
-                allSqSteps{counter,jj}=(rTrack(indvec1)-rTrack(indvec2)).^2*mpp^2;
+                allSqSteps{counter,jj}=(rTrack(indvec1)-rTrack(indvec2)).^2;
             else
                 % nansum because there are nans as placeholders
                 allSqSteps{counter,jj}=nansum((fixedTrack(indvec1,4:5)-...
-                    fixedTrack(indvec2,4:5)).^2,2)*mpp^2;
+                    fixedTrack(indvec2,4:5)).^2,2);
             end
         end
     end

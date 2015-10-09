@@ -26,6 +26,7 @@ end
 fun{1}=@(x,y)pixremfun(x,y);    % remove pixels outside mask
 fun{2}=@(x,y)fremfun(x,y);      % remove stationary objects via fft
 fun{3}=@(x,y)padmean(x,y);      % pad every image with its mean
+fun{5}=@(x,y)padzero(x,y);      % pad every image with zero
 
 % apply filters in arbitrary order
 for ii=whichfun(whichfun~=4)
@@ -76,6 +77,7 @@ function imstack=fremfun(imstack,mask) %#ok<INUSD>
 % fmin=1*2/movielengthinseconds;    % 1/15 1/s if the movie is 30 seconds long
 
 imsize=size(imstack);
+immean=mean(imstack(:));
 
 imstack=fft(imstack-mean(imstack(:)),2*imsize(3)+1,3);
 
@@ -86,6 +88,7 @@ imstack(:,:,1)=0;
 imstack=real(ifft(imstack,[],3));
 imstack=imstack(1:imsize(1),1:imsize(2),1:imsize(3));
 % plot(squeeze(mean(mean(imstack,1),2))-1)
+imstack=imstack+immean;
 end
 
 function imstack=padmean(imstack,mask)
@@ -93,6 +96,15 @@ imstack=mat2cell(imstack,size(imstack,1),size(imstack,2),ones(1,size(imstack,3))
 imm=cellfun(@(x)mean(mean(x(mask))),imstack,'uniformoutput',false);
 
 imstack=cellfun(@(x,y)padarray(x,floor(size(x)/2),y),imstack,imm,...
+    'uniformoutput',false);
+imstack=cat(3,imstack{:});
+end
+
+function imstack=padzero(imstack,mask) %#ok<INUSD>
+imstack=mat2cell(imstack,size(imstack,1),size(imstack,2),ones(1,size(imstack,3)));
+% imm=cellfun(@(x)mean(mean(x(mask))),imstack,'uniformoutput',false);
+
+imstack=cellfun(@(x,y)padarray(x,floor(size(x)/2),y),imstack,repmat({0},1,1,size(imstack,3)),...
     'uniformoutput',false);
 imstack=cat(3,imstack{:});
 end

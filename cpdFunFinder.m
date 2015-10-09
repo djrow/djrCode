@@ -20,7 +20,7 @@ switch dim
                                 msdFun=@(tau,p)abs(longmsd2d(p(1:3),tau));
                                 
                                 if isempty(pstart)
-                                    pstart=[.01,1,eps];
+                                    pstart=[.1,1,eps];
                                 end
                                 cpdLB=[0,0,-inf];
                                 cpdUB=[inf,inf,inf];
