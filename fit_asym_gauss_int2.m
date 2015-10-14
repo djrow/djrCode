@@ -87,6 +87,7 @@ for ii=1:numguess % Loop through each putative peak
     
     % mats for centroid calculation
     [x,y]=meshgrid(smallleft:smallright,smallbottom:smalltop);
+    X=cat(2,x(:),y(:));
     
     % Calculate the centroid to use as inital center guess
     smallboxcounts=sum(smallboxdata(:));
@@ -121,7 +122,7 @@ for ii=1:numguess % Loop through each putative peak
     
     % check fits?
     if skipshow==0
-        fval=reshape(gfun(fitparam,x,y),size(smallboxdata));
+        fval=reshape(gfun(fitparam,X),size(smallboxdata));
         
         display(['The second image should be just the background noise in '...
             'the first one.'])

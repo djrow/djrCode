@@ -24,7 +24,7 @@ function goodfitdata=masterfit2(mainfold,yescheckvals,yesfitting)
 yestracking=1;
 
 % use phasemasks?
-yesphasemasks=1;
+yesphasemasks=0;
 
 % if you're happy with the phasemask inside the analysis files, don't make
 % another one
@@ -47,7 +47,7 @@ yespovray=0;
 removeactivation=0;
 
 % background subtract? subwidth must be an integer
-yesbgroundsub=0;
+yesbgroundsub=1;
 subwidth=50;
 offset=1000;
 
@@ -56,7 +56,7 @@ offset=1000;
 % movie to output the ViewFits frames. Use "inf" if you want all movies to
 % generate ViewFits frames. Example, 'viewfits = [1 3]' will tell the code
 % to output ViewFits frames for the 1st and the 3rd movie.
-viewfits_mv=[1];
+viewfits_mv=[2,3,4];
 
 % parameters for phase mask finding. dilate factor, low thresh, high thres,
 % autofill, min area, max area
@@ -64,7 +64,7 @@ phaseparams=[1,0,1,0,100,10000];
 
 % Parameters for peak guessing, in the format of [noise size, particle
 % size, Intensity Threshold, H-Max, lzero]. usually [1,10,2e3,1e4,5]
-peak_guessing_params=[1,10,200,10,10];
+peak_guessing_params=[1,10,30,30,10];
 
 % Minimal separation of peaks (px). Putative peaks that are closer than
 % this value will be discarded unless it is the brightest one compared to
@@ -78,7 +78,6 @@ min_sep=5;
 % "good". See comments of the 'determine_goodfits.m' code for more details.
 width_lb=1;
 width_ub=15;
-aspect_ratio_ub=5;
 width_error_ub=5;
 
 % Pixel size in nm.
@@ -148,8 +147,9 @@ if yesfitting&&ischar(mainfold)         % fitting and folder location string giv
     [dlocs,dnames,dexts]=cellfun(@fileparts,datalist,'uniformoutput',false);
     
     % WRITE BIN FILES FOR ALL MOVIES
+    bFiles=dir([dataloc,'*.bin']);
     for ii=1:numel(dnames);
-        if strcmp(dexts{ii},'.nd2')||strcmp(dexts{ii},'.tif')||strcmp(dexts{ii},'.tiff')
+        if ~any(ismember({bFiles.name},[dnames{ii},'.bin']))
             writebin(fullfile(dlocs{ii},[dnames{ii},dexts{ii}]));
         end
     end
@@ -171,17 +171,19 @@ elseif isstruct(mainfold)               % folder location string is actually a s
     [dlocs,dnames,~]=fileparts(mainfold.name);
     dlocs={dlocs};
     dnames={dnames};
-    %     dexts={dexts};
+    dataloc=dlocs{1};
 end
 
 % WRITE BACKGROUND SUBTRACTED BINARY FILE
 if yesbgroundsub
-    for ii=1:numel(datalist);
-        if numel(dir([fullfile(dlocs{ii},dnames{ii}) '_bgsub.bin']))==0
+    h1=waitbar(0);
+    bFiles=dir([dataloc,'*_bgsub.bin']);
+    for ii=1:numel(dlocs);
+        if ~any(ismember({bFiles.name},[dnames{ii},'_bgsub.bin']))
             fid=fopen([fullfile(dlocs{ii},dnames{ii}) '_bgsub.bin'],'W');
             [~,nframes,sz]=bingetframes([fullfile(dlocs{ii},dnames{ii}),'.bin'],1,[]);
             
-            h1=waitbar(0,['writing bg sub frames for ' datalist{ii}(1:end-4)]);
+            waitbar(0,h1,['writing bg sub frames for ' datalist{ii}(1:end-4)]);
             for jj=1:floor(nframes/subwidth)
                 waitbar(jj/floor(nframes/subwidth),h1)
                 if jj~=floor(nframes/subwidth)
@@ -200,10 +202,8 @@ if yesbgroundsub
             fclose(fid);
         end
     end
-    if exist('h1','var')
-        if ishandle(h1)
-            close(h1)
-        end
+    try
+        close(h1)
     end
 end
 
@@ -228,12 +228,10 @@ if yesphasemasks&&yesfitting&&yescheckvals&&ischar(mainfold)
         
         
         mnamelist=who(m); mnamelist=mnamelist(:);
-        if any(cellfun(@strcmp,mnamelist,repmat({'phasemask'},...
-                [numel(mnamelist),1])))&&happywithphasemask
+        if any(ismember(mnamelist,'phasemask'))&&happywithphasemask
             continue
         end
-        if any(cellfun(@strcmp,mnamelist,repmat({'phaseparams'},...
-                [numel(mnamelist),1])))
+        if any(ismember(mnamelist,'phaseparams'))
             phaseparams=m.phaseparams;
         end
         
@@ -286,7 +284,6 @@ elseif yesfitting&&~yesphasemasks
     end
 end
 
-
 % Spatial ROI and temporal ROI. Though currently not used and function
 % merely as place holders, these parameters will be employed to expand the
 % functionality of the code.
@@ -305,9 +302,7 @@ for curr_mainfold=1:numel(dnames)  % Loop each movie for guessing/fitting/tracki
     goodfitdata={[]}; guesses=cell(1,num_files);
     
     skippedframes={};
-    if any(cellfun(@strcmp,mnamelist,repmat({'goodfitdata'},...
-            [numel(mnamelist),1])))==0||yesfitting==1
-        
+    if ~any(ismember(mnamelist,'goodfitdata'))||yesfitting==1
         % Display movie folder counter
         fprintf(['Fitting this movie: ',dnames{curr_mainfold},'\n'])
         
@@ -315,8 +310,7 @@ for curr_mainfold=1:numel(dnames)  % Loop each movie for guessing/fitting/tracki
             frameskip=0;
             h1=waitbar(0,'fittin stuff');
             
-            if any(cellfun(@strcmp,mnamelist,repmat({'peak_guessing_params'},...
-                    [numel(mnamelist),1])))
+            if any(ismember(mnamelist,'peak_guessing_params'))
                 peak_guessing_params=m.peak_guessing_params;
                 
                 yn=input(['input new peak guessing parameters? enter for ''no'', '...
@@ -346,11 +340,9 @@ for curr_mainfold=1:numel(dnames)  % Loop each movie for guessing/fitting/tracki
                     end
                     
                     % 3D Peak Fitting and z-position extraction -------------------
-                    
-                    
                     % Fit putative peaks. peak guessing is in fit_asym_gauss_int2
                     [all_fitparam,all_fiterr,guesses{ii},frameskip]=fit_asym_gauss_int2(thisframe,...
-                        phasemask,2,peak_guessing_params,min_sep,frameskip,ii);
+                        phasemask,1,peak_guessing_params,min_sep,frameskip,ii);
                     
                     Wx=all_fitparam(:,3)*pxsize; Wy=all_fitparam(:,6)*pxsize;
                     
@@ -392,7 +384,7 @@ for curr_mainfold=1:numel(dnames)  % Loop each movie for guessing/fitting/tracki
                             all_fiterr(:,2),all_fitparam(:,3),all_fiterr(:,3),... % 6,7,8
                             all_fitparam(:,4),all_fiterr(:,4),all_fitparam(:,5),... % 9,10,11
                             all_fiterr(:,5),nan(numfits,1),all_fitparam(:,7),... % 12,13,14
-                            repmat(min_sep*2+1,[numfits, 1]),all_fitparam(:, 6),... % 15,16
+                            repmat(min_sep*2+1,[numfits, 1]),all_fitparam(:,6),... % 15,16
                             all_fiterr(:,6),all_fitparam(:,3)./all_fitparam(:,6),... % 17,18
                             z_px(valid_param_rows),z_uncertainty_px(valid_param_rows),... % 19,20
                             phasemask(sub2ind(size(phasemask),... % 21
@@ -406,28 +398,16 @@ for curr_mainfold=1:numel(dnames)  % Loop each movie for guessing/fitting/tracki
                         % y-width error (18) aspect ratio (x width/y width) (19) z-center
                         % (20) z-center error uncertainty (21) cell # (22) sROI (23) tROI
                         
-                        % good fits based on the following
-                        % criterion: (1) Amplitude > Offset, (2) X- and Y-widths both larger than
-                        % their respective statistical errors, (3) Statistical errors of X- and
-                        % Y-widths are both smaller than a predefined value (4) X- and Y-widths are
-                        % both within a preset range (not too narrow or too wide), (5) Aspect ratio
-                        % is within a preset range, (6) Fits lie within the cell boundaries as
-                        % defined by the phase mask and (7) Z-position is not NaN (i.e., fit widths
-                        % lie close to the defocusing calibration curve)
-                        
-                        raw_fitdata(:,13)=(raw_fitdata(:,3)>0).*... % Amplitude > amp error
-                            (raw_fitdata(:,16)>raw_fitdata(:,17)).*... % width > error
-                            (raw_fitdata(:,5)>0).*... % background offset is positive
-                            (raw_fitdata(:,8)<width_error_ub).*...
-                            (raw_fitdata(:,17)<width_error_ub).*... % Width error < UB
-                            (raw_fitdata(:,7)>width_lb).*...
-                            (raw_fitdata(:,7)<width_ub).*... % LB < x-width < UB
-                            (raw_fitdata(:,16)>width_lb).*...
-                            (raw_fitdata(:,16)<width_ub).*... % LB < y-width < UB
-                            (raw_fitdata(:,18)<aspect_ratio_ub).*... % aspect ratio (Wx / Wy) < UB
-                            ((1./raw_fitdata(:,18))<aspect_ratio_ub).*... % aspect ratio (Wy / Wx) < UB
-                            logical(raw_fitdata(:,21)).*... % Within cell boundaries
-                            ~isnan(raw_fitdata(:,19));  % Non-NaN z-position
+                        raw_fitdata(:,13)=(all_fitparam(:,1)>0).*... % Amplitude > amp error
+                            (all_fitparam(:,3)>all_fiterr(:,3)).*... % width > error
+                            (all_fiterr(:,3)<width_error_ub).*...
+                            (all_fiterr(:,6)<width_error_ub).*... % Width error < UB
+                            (all_fitparam(:,3)>width_lb).*...
+                            (all_fitparam(:,3)<width_ub).*... % LB < x-width < UB
+                            (all_fitparam(:,6)>width_lb).*...
+                            (all_fitparam(:,6)<width_ub).*... % LB < y-width < UB
+                            raw_fitdata(:,21).*... % Within cell boundaries
+                            ~isnan(z_px(valid_param_rows));  % Non-NaN z-position
                         
                         goodfitdata{ii}=raw_fitdata(raw_fitdata(:,13)==1,:);
                     end
@@ -447,15 +427,11 @@ for curr_mainfold=1:numel(dnames)  % Loop each movie for guessing/fitting/tracki
                 z_std_LUT=[];
             end
             
-            if any(cellfun(@strcmp,mnamelist,repmat({'peak_guessing_params'},...
-                    [numel(mnamelist),1])))
+            if any(ismember(mnamelist,'peak_guessing_params'))
                 peak_guessing_params=m.peak_guessing_params;
             end
             
-            %             parfor_progress(num_files); % get this m-file
-            for ii=1:num_files
-                %                 parfor_progress;
-                
+            parfor ii=1:num_files                
                 [thisframe,~,~,tval]=bingetframes(...
                     [fullfile(dlocs{curr_mainfold},dnames{curr_mainfold}) '.bin'],ii,[]);
                 if removeactivation==1
@@ -467,7 +443,7 @@ for curr_mainfold=1:numel(dnames)  % Loop each movie for guessing/fitting/tracki
                     skippedframes{ii}=nan;
                 end
                 [all_fitparam,all_fiterr,guesses{ii}]=fit_asym_gauss_int2(thisframe,...
-                    phasemask,2,peak_guessing_params,min_sep);
+                    phasemask,1,peak_guessing_params,min_sep);
                 Wx=all_fitparam(:,3)*pxsize; Wy=all_fitparam(:,6)*pxsize;
                 if yes3d
                     % Find the z-location (the output is converted to pixels here).
@@ -494,24 +470,22 @@ for curr_mainfold=1:numel(dnames)  % Loop each movie for guessing/fitting/tracki
                         all_fiterr(:,2),all_fitparam(:,3),all_fiterr(:,3),... % 6,7,8
                         all_fitparam(:,4),all_fiterr(:,4),all_fitparam(:,5),... % 9,10,11
                         all_fiterr(:,5),nan(numfits,1),all_fitparam(:,7),... % 12,13,14
-                        repmat(min_sep*2+1,[numfits, 1]),all_fitparam(:, 6),... % 15,16
+                        repmat(min_sep*2+1,[numfits, 1]),all_fitparam(:,6),... % 15,16
                         all_fiterr(:,6),all_fitparam(:,3)./all_fitparam(:,6),... % 17,18
                         z_px(valid_param_rows),z_uncertainty_px(valid_param_rows),... % 19,20
                         phasemask(sub2ind(size(phasemask),... % 21
                         ceil(all_fitparam(:,5)),ceil(all_fitparam(:,4)))),... % 21 cont.
                         repmat(sROI,[numfits,1]),repmat(tROI,[numfits,1])];  % 22, 23
-                    raw_fitdata(:,13)=(raw_fitdata(:,3)>0).*... % Amplitude > amp error
-                        (raw_fitdata(:,16)>raw_fitdata(:,17)).*... % width > error
-                        (raw_fitdata(:,8)<width_error_ub).*...
-                        (raw_fitdata(:,17)<width_error_ub).*... % Width error < UB
-                        (raw_fitdata(:,7)>width_lb).*...
-                        (raw_fitdata(:,7)<width_ub).*... % LB < x-width < UB
-                        (raw_fitdata(:,16)>width_lb).*...
-                        (raw_fitdata(:,16)<width_ub).*... % LB < y-width < UB
-                        (raw_fitdata(:,18)<aspect_ratio_ub).*... % aspect ratio (Wx / Wy) < UB
-                        ((1./raw_fitdata(:,18))<aspect_ratio_ub).*... % aspect ratio (Wy / Wx) < UB
-                        logical(raw_fitdata(:,21)).*... % Within cell boundaries
-                        ~isnan(raw_fitdata(:,19));  % Non-NaN z-position
+                    raw_fitdata(:,13)=(all_fitparam(:,1)>0).*... % Amplitude > amp error
+                        (all_fitparam(:,3)>all_fiterr(:,3)).*... % width > error
+                        (all_fiterr(:,3)<width_error_ub).*...
+                        (all_fiterr(:,6)<width_error_ub).*... % Width error < UB
+                        (all_fitparam(:,3)>width_lb).*...
+                        (all_fitparam(:,3)<width_ub).*... % LB < x-width < UB
+                        (all_fitparam(:,6)>width_lb).*...
+                        (all_fitparam(:,6)<width_ub).*... % LB < y-width < UB
+                        raw_fitdata(:,21).*... % Within cell boundaries
+                        ~isnan(z_px(valid_param_rows));  % Non-NaN z-position
                     
                     goodfitdata{ii}=raw_fitdata(raw_fitdata(:,13)==1,:);
                 end
@@ -564,8 +538,7 @@ for curr_mainfold=1:numel(dnames)  % Loop each movie for guessing/fitting/tracki
         
         % if the trackfile doesn't exist in the analysis file or if tracking is
         % enforced
-    elseif sum(cellfun(@strcmp,mnamelist,repmat({'trackfile'},...
-            [numel(mnamelist),1])))==0||yestracking
+    elseif ~any(ismember(mnamelist,'trackfile'))||yestracking
         
         if yesphasemasks            % if phasemasks are used
             % plot 2D tracks
@@ -585,15 +558,14 @@ for curr_mainfold=1:numel(dnames)  % Loop each movie for guessing/fitting/tracki
             fprintf(['tracking file named: ' dnames{curr_mainfold} '.\n'])
         end
         
-        counter=0; yn=[];
+        counter=0;
         while counter<2         % two sequential agreements finish this loop
             
             % if trackparams exist in the analysis file and it's the first
             % time the while loop has run and the user hasn't input
             % tracking parameters (at the end of this while loop)
             mnamelist=who(m); mnamelist=mnamelist(:);
-            if any(cellfun(@strcmp,mnamelist,repmat({'trackparams'},...
-                    [numel(mnamelist),1])))&&counter==0&&isempty(yn)
+            if any(ismember(mnamelist,'trackparams'))&&counter==0
                 temptrackparams=m.trackparams;
                 
                 % if yescheckvals is enabled and any of the trackparams
@@ -605,13 +577,13 @@ for curr_mainfold=1:numel(dnames)  % Loop each movie for guessing/fitting/tracki
                         trackparams=temptrackparams;
                     end
                 end
+                yn=trackparams;
             end
             
             % if (at the end of this while loop) the user input tracking
             % parameters
-            if ~isempty(yn)
+            if any(yn~=trackparams)
                 trackparams=yn;
-                counter=0;              % reset the while loop
             else
                 counter=counter+1;
             end
@@ -703,7 +675,7 @@ for curr_mainfold=1:numel(dnames)  % Loop each movie for guessing/fitting/tracki
     end
     
     % Output ViewFit Files for the Current Movie (If Selected)
-    if ismember(curr_mainfold,viewfits_mv)||isinf(viewfits_mv)
+    if any(ismember(viewfits_mv,curr_mainfold))||any(isinf(viewfits_mv))
         % Output ViewFits frames if the fit file is not empty
         if numel(goodfitdata)>0
             fprintf(['\nGenerating ViewFits frames for ''',...
