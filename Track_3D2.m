@@ -362,11 +362,9 @@ if enough_goodfits==1
     track_data(:,4)=fitfile.data(track_row,9);                      % x-position(px)
     track_data(:,5)=fitfile.data(track_row,11);                     % y-position(px)
     track_data(:,15)=fitfile.data(track_row,19);                    % z-position(px)
-    track_data(2:end,6)=sqrt(...
-        (track_data(2:end,4)-track_data(1:end-1,4)).^2+...
-        (track_data(2:end,5)-track_data(1:end-1,5)).^2+ ...
-        (track_data(2:end,15)-track_data(1:end-1,15)).^2);
-    track_data(cum_tr_length(1:end-1)+1,6)=nan;                     % Displacement(px)
+    track_data(2:end,6)=sqrt(sum(track_data(2:end,[4,5,15])-...
+        track_data(1:end-1,[4,5,15]),2))                            % Displacement(px)
+    track_data(cum_tr_length(1:end-1)+1,6)=nan;                     % ?
     track_data(:,7)=track_data(:,6)*pxsize;                         % Displacement(nm)
     track_data(:,8)=fitfile.data(track_row,10);                     % x-error (px)
     track_data(:,9)=fitfile.data(track_row,22);                     % sROI#

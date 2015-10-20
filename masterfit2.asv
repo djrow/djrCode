@@ -62,7 +62,7 @@ phaseparams=[1,0,1,0,100,10000];
 
 % Parameters for peak guessing, in the format of [noise size, particle
 % size, Intensity Threshold, H-Max, lzero]. usually [1,10,2e3,1e4,5]
-peak_guessing_params=[1,10,20,20,10];
+peak_guessing_params=[1,10,10,10,10];
 
 % Minimal separation of peaks (px). Putative peaks that are closer than
 % this value will be discarded unless it is the brightest one compared to
@@ -225,7 +225,8 @@ end
 if yesphasemasks&&yesfitting&&yescheckvals&&ischar(mainfold)
     for ii=1:numel(dnames)
         m=matfile([fullfile(dlocs{ii},dnames{ii}),'_analysis.mat'],'Writable',true);
-                
+        
+        
         mnamelist=who(m); mnamelist=mnamelist(:);
         if any(ismember(mnamelist,'phasemask'))&&happywithphasemask
             continue
@@ -318,7 +319,6 @@ for curr_mainfold=1:numel(dnames)  % Loop each movie for guessing/fitting/tracki
             
             if ~isempty(yn)
                 peak_guessing_params=yn;
-                m.peak_guessing_params=peak_guessing_params;
             end
             
             for ii=1:num_files; % Loop through each frame of the current movie
@@ -527,11 +527,12 @@ for curr_mainfold=1:numel(dnames)  % Loop each movie for guessing/fitting/tracki
     %  ------------------------------------------------------------------------
     
     % if tracking is disabled
-    if any(ismember(mnamelist,'trackfile'))&&~yestracking
-        trfile=m.trackfile;
+    if ~yestracking
+        trfile=[];
         
-    % if tracking is enforced
-    elseif yestracking
+        % if the trackfile doesn't exist in the analysis file or if
+        % tracking is enforced
+    elseif any(ismember(mnamelist,'trackfile'))&&yestracking
         
         if yesphasemasks            % if phasemasks are used
             % plot 2D tracks
@@ -666,6 +667,7 @@ for curr_mainfold=1:numel(dnames)  % Loop each movie for guessing/fitting/tracki
         end
         m.trackfile=trfile;
         m.trackparams=trackparams;
+    elseif ~any(ismember(mnamelist,'trackfile'))&&yestracking
     end
     
     % Output ViewFit Files for the Current Movie (If Selected)
