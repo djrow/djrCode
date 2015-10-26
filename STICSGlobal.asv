@@ -1,11 +1,11 @@
-function fCoeff=STICSGlobal(v,nDiffs,immPop,diffModel)
+function fCoeff=STICSGlobal(v)
 
-% nDiffs=1;
-% immPop=0;
-% diffModel='confined';
+nDiffs=1;
+immPop=0;
+diffModel='confined';
 
 % 3 elements if unconfined, 5 if confined.
-pStart=[];
+pStart=[1,1,3.7505    0.7100   -0.0227    0.0020    0.0001];
 
 % filters to use when calculating the correlation functions
 % 1:
@@ -13,10 +13,10 @@ pStart=[];
 % 3: pad with mean
 % 4: non-overlapping time lags;
 % 5: pad with zeros
-sticsFilters=[4,5];
+sticsFilters=[3];
 
 % maximum frame separation to consider
-maxTau=10;
+maxTau=20;
 
 % magnification of the microscope in micrometers/pixel.
 mpp=.049;
@@ -44,13 +44,11 @@ wSizeM=size(tCorr)*mpp;
 wSizeP=size(tCorr);
 
 % space correlations for each tau must be in a cell element by themselves
-ind1=round(wSizeP/2-wSizeP(1)/4):round(wSizeP/2+wSizeP(1)/4);
-ind2=round(wSizeP/2-wSizeP(2)/4):round(wSizeP/2+wSizeP(2)/4);
-tCorr=squeeze(mat2cell(tCorr(ind1,ind2,2:end),...
-    numel(ind1),numel(ind1),ones(1,maxTau)))';
+tCorr=squeeze(mat2cell(tCorr(:,:,2:end),wSizeP(1),wSizeP(2),ones(1,maxTau)))';
 
 % space domain
-[X,Y]=ndgrid((ind1-mean(ind1))*mpp,(ind2-mean(ind2))*mpp);
+[X,Y]=ndgrid(linspace(-wSizeM(1)/2,wSizeM(1)/2,wSizeP(1)),...
+    linspace(-wSizeM(2)/2,wSizeM(2)/2,wSizeP(2)));
 corrDom=cat(3,X,Y);
 corrDom={corrDom}; 
 corrDom=corrDom(1,ones(1,maxTau));
@@ -59,7 +57,7 @@ corrDom=corrDom(1,ones(1,maxTau));
 tau=(1:maxTau)*intTime;
 
 % fit
-% pStart(3)=max(tCorr{1}(:))-min(tCorr{1}(:));
+pStart(3)=max(tCorr{1}(:))-min(tCorr{1}(:));
 display('fitting...')
 fCoeff=lsqnonlin(@(p)fHandle(p,tau,corrDom,tCorr),pStart,corrLB,corrUB);
 
@@ -70,22 +68,22 @@ residCorr=cellfun(@(x,y)x-y,tCorr,predCorr,'uniformoutput',0);
 
 pTau=3;
 for kk=1:pTau
-    subplot(3,pTau,kk); pcolor(tCorr{(kk-1)*3+1});
+    subplot(3,pTau,kk); pcolor(tCorr{(kk-1)*5+1});
     axis image; shading flat; axis off
     cl=get(gca,'clim');
     
     if kk==2
-        title(num2str(fCoeff([1,4])))
+        title(num2str(fCoeff(1)))
     end
     
-    subplot(3,pTau,kk+pTau); pcolor(residCorr{(kk-1)*3+1});
+    subplot(3,pTau,kk+pTau); pcolor(residCorr{(kk-1)*5+1});
     axis image; shading flat; axis off
-    cl=cl-min(cl)+nanmin(nanmin(residCorr{(kk-1)*3+1}));
+    cl=cl-min(cl)+nanmin(nanmin(residCorr{(kk-1)*5+1}));
     set(gca,'clim',cl);
     
-    subplot(3,pTau,kk+2*pTau); pcolor(startCorr{(kk-1)*3+1});
+    subplot(3,pTau,kk+2*pTau); pcolor(startCorr{(kk-1)*5+1});
     axis image; shading flat; axis off
-    cl=cl-min(cl)+nanmin(nanmin(startCorr{(kk-1)*3+1}));
+    cl=cl-min(cl)+nanmin(nanmin(startCorr{(kk-1)*5+1}));
     set(gca,'clim',cl);
 end
 

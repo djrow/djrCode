@@ -24,7 +24,7 @@ dim=2;
 
 % direction of unit vector along the dimension you wish to consider (if
 % dim=1), in radians
-dimAngle=pi/2;
+dimAngle=0;%pi/2;
 
 % number of diffusive populations in the CPD model (1 or 2)
 % nDiffs=1;
@@ -208,38 +208,38 @@ s2=sum(cat(1,residCPD{:}).^2)/n;
 BIC=n*log(s2)+k*log(n);
 end
 
-%% square confinement model
-function z=longmsd2d(p,x)
-% global camerasd
-d=p(1); l=p(2); tau=x;
-
-summedterm=@(t,d,l,n)1/n^4*exp(-(n*pi/l).^2*d*t);
-
-temp=eps*ones(size(tau));
-for ii=1:2:2*400-1
-    s=summedterm(tau,d,l,ii);
-    if sum(s./temp)<1e-10
-        break
-    end
-    temp=temp+s;
-end
-z=l^2/3*(1-96/pi^4*temp)+p(3);
-end
-
-%% square confinement model
-function z=longmsd1d(p,x)
-% global camerasd
-d=p(1); l=p(2); tau=x;
-
-summedterm=@(t,d,l,n)1/n^4*exp(-(n*pi/l).^2*d*t);
-
-temp=eps*ones(size(tau));
-for ii=1:2:2*400-1
-    s=summedterm(tau,d,l,ii);
-    if sum(s./temp)<1e-10
-        break
-    end
-    temp=temp+s;
-end
-z=l^2/6*(1-96/pi^4*temp)+p(3);
-end
+% %% square confinement model
+% function z=longmsd2d(p,x)
+% % global camerasd
+% d=p(1); l=p(2); tau=x;
+% 
+% summedterm=@(t,d,l,n)1/n^4*exp(-(n*pi/l).^2*d*t);
+% 
+% temp=eps*ones(size(tau));
+% for ii=1:2:2*400-1
+%     s=summedterm(tau,d,l,ii);
+%     if sum(s./temp)<1e-10
+%         break
+%     end
+%     temp=temp+s;
+% end
+% z=l^2/3*(1-96/pi^4*temp)+p(3);
+% end
+% 
+% %% square confinement model
+% function z=longmsd1d(p,x)
+% % global camerasd
+% d=p(1); l=p(2); tau=x;
+% 
+% summedterm=@(t,d,l,n)1/n^4*exp(-(n*pi/l).^2*d*t);
+% 
+% temp=eps*ones(size(tau));
+% for ii=1:2:2*400-1
+%     s=summedterm(tau,d,l,ii);
+%     if sum(s./temp)<1e-10
+%         break
+%     end
+%     temp=temp+s;
+% end
+% z=l^2/6*(1-96/pi^4*temp)+p(3);
+% end

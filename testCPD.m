@@ -34,10 +34,10 @@ if ~isstruct(dType)
     mpp=.049;
     
     % number of total steps taken
-    nSteps=1e3;
+    nSteps=1e4;
     
     % diffusion coefficients in microns^2/s
-    d1=.1;
+    d1=.8;
     d2=.01;
     
     % fraction of total steps taken by each diffusing population
@@ -125,10 +125,11 @@ for ii=1:numel(tr)
     hold all
 end
 if dType>8
-    line([0,cLength1,cLength1,0,0],[0,0,cLength2,cLength2,0]*mpp,'color','k');
+    line([0,cLength1,cLength1,0,0],[0,0,cLength2,cLength2,0],'color','k');
 end
 hold off
 axis image
+axis([-.1,cLength1+.1,-.1,cLength2+.1])
 title(diffusionTitles{dType})
 
 % concatenate tracks into one matrix
