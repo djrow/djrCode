@@ -410,7 +410,8 @@ if yesGauss
                 
                 % space domain
                 [X,Y]=ndgrid((ind1-mean(ind1))*mpp,(ind2-mean(ind2))*mpp);
-                X(~bphmask)=nan; Y(~bphmask)=nan;
+                X(~bphmask(:,:,ones(1,maxTau)))=nan;
+                Y(~bphmask(:,:,ones(1,maxTau)))=nan;
                 corrDom=cat(3,X,Y);
                 corrDom={corrDom};
                 corrDom=corrDom(1,ones(1,maxTau));
