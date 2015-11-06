@@ -37,7 +37,7 @@ if ~isstruct(dType)
     nSteps=1e4;
     
     % diffusion coefficients in microns^2/s
-    d1=.8;
+    d1=.1;
     d2=.01;
     
     % fraction of total steps taken by each diffusing population
@@ -45,7 +45,7 @@ if ~isstruct(dType)
     d2Frac=1/3;
     
     % confinement lengths in each dimension in microns
-    cLength1=1;
+    cLength1=.5;
     cLength2=1;
     
     % camera integration time in seconds

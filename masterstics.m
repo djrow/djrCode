@@ -255,7 +255,6 @@ if yesStics
             fprintf(['cross-correlating cell ', num2str(counter), ' of '...
                 num2str(max(ncells)), '.\n'])
             if nbins>1
-                
                 timecorr=cell(1,nbins);
                 for kk=1:nbins
                     fnums=1+binsize*(kk-1):binsize*kk;
@@ -416,7 +415,7 @@ if yesGauss
                 corrDom=corrDom(1,ones(1,maxTau));
                 
                 % fit
-                fCoeff=lsqnonlin(@(p)fHandle(p,tau,corrDom,workingCorr),pStart,corrLB,corrUB);
+                fCoeff=lsqnonlin(@(p)fHandle(p,tau,corrDom,workingCorr,th),pStart,corrLB,corrUB);
                 
                 %% Plot the results
                 if showFitting

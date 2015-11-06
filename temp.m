@@ -1,4 +1,4 @@
-function goodfitdata=masterfit2(mainfold,yesCheckVals,yesFitting)
+function goodfitdata=masterfit2(mainfold,yescheckvals,yesfitting)
 % mainfold should have nd2 files or tiff stacks. if there are phasemask
 % tiff files, they should correspond 1:1 with the nd2 files. the outputs
 % written to disk are a 2Dtracks.fig, fits.fig, _analysis.mat, and a binary
@@ -9,64 +9,31 @@ function goodfitdata=masterfit2(mainfold,yesCheckVals,yesFitting)
 %
 % there are various usage settings below.
 
-%% CAMERA PARAMETERS
-% Pixel size in nm.
-pxSize=49;
+%% ------------------------------------------------------------------------
+%  User-Defined Parameters
+%  ------------------------------------------------------------------------
 
-% camera capture rate in 1/s
-frameRate=25;
+% run peak fitting in parallel. set this to 0 if you need to fix the peak
+% guessing or fitting parameters. checkvals=0;
 
+% run fitting? yesfitting=0;
 
-%% PHASEMASK PARAMETERS. 
-% dilate factor, low thresh, high thres, autofill, min area, max area
-phaseparams=[1,0,1,0,100,10000];
-
-
-%% PEAK GUESSING PARAMETERS, 
-% noise size, particle size, Intensity Threshold, H-Max, lzero]
-peak_guessing_params=[1,10,20,20,10];
-
-
-%% TRACKING PARAMETERS
-% minimum merit
-trackparams(1)=0.1;
-
-% Integration time (ms)
-trackparams(2)=1/frameRate;
-
-% gamma
-trackparams(3)=3;
-
-% maximum step size
-trackparams(4)=8;
-
-% minimum track length
-trackparams(5)=3;
-
-% speed estimation window halfsize
-trackparams(6)=1;
-
-% time delay between consecutive frames (ms)
-trackparams(7)=0;
-
-
-%% ANALYSIS PARAMETERS
 % run tracking?
-yesTracking=1;
+yestracking=0;
 
 % use phasemasks?
-yesPhasemasks=0;
+yesphasemasks=0;
 
 % if you're happy with the phasemask inside the analysis files, don't make
 % another one
-happyWithPhasemask=1;
+happywithphasemask=1;
 
-% skip manual selection of actual bacterial cells. do you trust that the
-% mask finding algorithm won't make mistakes?
-skipSelect=0;
+% skip selecting cells from phase mask? this choice is skipped if
+% yesphasemasks is false
+skipselect=0;
 
 % plot things?
-yesPlot=1;
+yesplot=1;
 
 % run 3d code?
 yes3d=0;
@@ -74,43 +41,76 @@ yes3d=0;
 % make pov-ray csv files?
 yespovray=0;
 
-% make xls file from goodfitdata
-makeXls=0;
-
 % remove activation?
 removeactivation=0;
 
-% background subtract? subwidth must be an integer.
+% background subtract? subwidth must be an integer
 yesbgroundsub=1;
 subwidth=50;
-offset=1000;
+offset=0;
 
 % Input which movie(s) will generate the ViewFits frames that are useful
 % for checking guessing/fitting parameters. Use "0" if you do not want any
 % movie to output the ViewFits frames. Use "inf" if you want all movies to
 % generate ViewFits frames. Example, 'viewfits = [1 3]' will tell the code
 % to output ViewFits frames for the 1st and the 3rd movie.
-viewfits_mv=[1];
+viewfits_mv=inf;
 
-% Minimal separation of peaks (px). Of two putative peaks that are closer than
-% this value, the dimmer of the two will be discarded.
+% parameters for phase mask finding. dilate factor, low thresh, high thres,
+% autofill, min area, max area
+phaseparams=[1,0,1,0,100,10000];
+
+% Parameters for peak guessing, in the format of [noise size, particle
+% size, Intensity Threshold, H-Max, lzero]. usually [1,10,2e3,1e4,5]
+peak_guessing_params=[1,10,20,20,5];
+
+% Minimal separation of peaks (px). Putative peaks that are closer than
+% this value will be discarded unless it is the brightest one compared to
+% its neighbors. Also, this is the half box size of the fitting region,
+% i.e., if 'min_sep = 10', pixel intensities within a 21-by-21 square
+% region will be used in PSF fitting.
 min_sep=5;
 
 % Lower and upper bounds (in pixels, except for the aspect ratio) for
 % various fit parameters that will be used to determine whether a fit is
-% "good".
+% "good". See comments of the 'determine_goodfits.m' code for more details.
 width_lb=1;
 width_ub=15;
 width_error_ub=5;
 
+% Pixel size in nm.
+pxsize=49;
+
+% camera capture rate in 1/s
+framerate=25;
+
 % The maximum allowable separation (nm) of an input width pair and the 2
 % defocusing calibration curves. Fits falling too far from the calibration
 % curve will be rejected, have NaN for the z-center value and will not show
-% up in the good fits .dat file. 
+% up in the good fits .dat file.
 max_allowed_D=100;
 
 % Correction factor for index of refraction mismatch. Usually less than 1.
 indRefr_corr=0.79;
+
+% TRACKING PARAMETERS (See comments from the 'Track_3D.m' code for the
+% meaning of each paramter)
+timedelay=0; % Time delay between consecutive frames (ms)
+itgtime=40; % Integration time (ms)
+min_merit=0.1;
+max_step_size=8;
+alpha=-log(min_merit)/max_step_size;
+gamma=3;
+min_tr_length=3;
+speed_boxcar_halfsize=1;
+
+trackparams(1)=min_merit;
+trackparams(2)=itgtime;
+trackparams(3)=gamma;
+trackparams(4)=max_step_size;
+trackparams(5)=min_tr_length;
+trackparams(6)=speed_boxcar_halfsize;
+trackparams(7)=timedelay;
 
 %% ------------------------------------------------------------------------
 %  Load 3D Fitting Parameters and Phase Masks
@@ -129,7 +129,7 @@ if yes3d
 end
 
 % find all the relevant files
-if yesFitting&&ischar(mainfold)         % fitting and folder location string given as input
+if yesfitting&&ischar(mainfold)         % fitting and folder location string given as input
     display('Select the movies.')
     [datalist,dataloc,findex]=uigetfile([mainfold filesep '*.nd2;*.tif*;*.bin'],...
         'Matlab Files','multiselect','on');
@@ -150,7 +150,7 @@ if yesFitting&&ischar(mainfold)         % fitting and folder location string giv
             writebin(fullfile(dlocs{ii},[dnames{ii},dexts{ii}]));
         end
     end
-elseif ~yesFitting&&ischar(mainfold)    % not fitting and folder location string given as input
+elseif ~yesfitting&&ischar(mainfold)    % not fitting and folder location string given as input
     display('Select the analysis files.')
     [datalist,dataloc,findex]=uigetfile([mainfold filesep '*.mat'],...
         'Matlab Files','multiselect','on');
@@ -171,14 +171,13 @@ elseif isstruct(mainfold)               % folder location string is actually a s
     dataloc=dlocs{1};
 end
 
-%% WRITE BACKGROUND SUBTRACTED BINARY FILE
-if yesbgroundsub&&yesFitting
+% WRITE BACKGROUND SUBTRACTED BINARY FILE
+if yesbgroundsub
+    h1=waitbar(0);
     bFiles=dir([dataloc,'*_bgsub.bin']);
     for ii=1:numel(dlocs);
         if ~any(ismember({bFiles.name},[dnames{ii},'_bgsub.bin']))&&...
                 ~any(ismember({bFiles.name},dnames{ii}))
-            h1=waitbar(0);
-            
             fid=fopen([fullfile(dlocs{ii},dnames{ii}) '_bgsub.bin'],'W');
             [~,nframes,sz]=bingetframes([fullfile(dlocs{ii},dnames{ii}),'.bin'],1,[]);
             
@@ -209,10 +208,8 @@ if yesbgroundsub&&yesFitting
     end
 end
 
-%% WRITE PHASEMASKS FILE FOR ALL MOVIES
-
-% find phase contrast images
-if yesPhasemasks&&ischar(mainfold)
+% WRITE PHASEMASKS FILE FOR ALL MOVIES
+if yesphasemasks&&ischar(mainfold)
     display('Select the phase images.')
     [phaselist,phaselistloc,findex]=uigetfile([mainfold filesep...
         '*.nd2;*.tif*;*.bin'],'Matlab Files','multiselect','on');
@@ -226,12 +223,12 @@ if yesPhasemasks&&ischar(mainfold)
     [plocs,pnames,pexts]=cellfun(@fileparts,phaselist,'uniformoutput',false);
 end
 
-if yesPhasemasks&&yesFitting&&yesCheckVals&&ischar(mainfold)
+if yesphasemasks&&yesfitting&&yescheckvals&&ischar(mainfold)
     for ii=1:numel(dnames)
         m=matfile([fullfile(dlocs{ii},dnames{ii}),'_analysis.mat'],'Writable',true);
                 
         mnamelist=who(m); mnamelist=mnamelist(:);
-        if any(ismember(mnamelist,'phasemask'))&&happyWithPhasemask
+        if any(ismember(mnamelist,'phasemask'))&&happywithphasemask
             continue
         end
         if any(ismember(mnamelist,'phaseparams'))
@@ -249,7 +246,7 @@ if yesPhasemasks&&yesFitting&&yesCheckVals&&ischar(mainfold)
         
         counter=0;
         while counter<1
-            phasemask=valley(img(:,:,1),phaseparams,yesCheckVals);
+            phasemask=valley(img(:,:,1),phaseparams,yescheckvals);
             
             % prompt user for parameter changes
             dlgPrompt={'dilation factor', 'lower threshold',...
@@ -271,7 +268,7 @@ if yesPhasemasks&&yesFitting&&yesCheckVals&&ischar(mainfold)
                 counter=counter+1;
             end
         end
-        if ~skipSelect
+        if ~skipselect
             [~,goodcells]=select_cells(phasemask,img);
             phasemask(logical(-1*(ismember(phasemask,goodcells)-1)))=0;
         end
@@ -279,7 +276,7 @@ if yesPhasemasks&&yesFitting&&yesCheckVals&&ischar(mainfold)
         m.phaseparams=phaseparams;
         m.peak_guessing_params=peak_guessing_params;
     end
-elseif ~yesPhasemasks
+elseif yesfitting&&~yesphasemasks
     for ii=1:numel(dnames)
         [~,~,sz]=bingetframes([fullfile(dlocs{ii},dnames{ii}),'.bin'],1,[]);
         m=matfile([fullfile(dlocs{ii},dnames{ii}),'_analysis.mat'],'Writable',true);
@@ -296,26 +293,25 @@ end
 sROI=1;
 tROI=1;
 
-% Loop each movie for guessing/fitting/tracking
-for curr_mainfold=1:numel(dnames)
+for curr_mainfold=1:numel(dnames)  % Loop each movie for guessing/fitting/tracking
     [~,num_files,~]=bingetframes([fullfile(...
         dlocs{curr_mainfold},dnames{curr_mainfold}),'.bin'],1,[]);
     
     m=matfile([fullfile(dlocs{curr_mainfold},dnames{curr_mainfold}),...
         '_analysis.mat'],'Writable',true);
     mnamelist=who(m); mnamelist=mnamelist(:);
-    
+
     phasemask=m.phasemask;
     
     %% psf fitting
     goodfitdata={[]}; guesses=cell(1,num_files);
     
     skippedframes={};
-    if ~any(ismember(mnamelist,'goodfitdata'))||yesFitting==1
+    if ~any(ismember(mnamelist,'goodfitdata'))||yesfitting==1
         % Display movie folder counter
         fprintf(['Fitting this movie: ',dnames{curr_mainfold},'\n'])
         
-        if yesCheckVals==1
+        if yescheckvals==1
             frameskip=0;
             
             yn=input(['input new peak guessing parameters? enter for ''no'', '...
@@ -330,7 +326,7 @@ for curr_mainfold=1:numel(dnames)
                 
                 if frameskip<=ii
                     % Read the current frame
-                    thisframe=bingetframes(...
+                    [thisframe,~,~,tval]=bingetframes(...
                         [fullfile(dlocs{curr_mainfold},dnames{curr_mainfold}) '.bin'],ii,[]);
                     if removeactivation
                         if sum(sum(thisframe))>tval
@@ -348,14 +344,14 @@ for curr_mainfold=1:numel(dnames)
                         fit_asym_gauss_int2(thisframe,phasemask,1,...
                         peak_guessing_params,min_sep,frameskip,ii);
                     
-                    Wx=all_fitparam(:,3)*pxSize; Wy=all_fitparam(:,6)*pxSize;
+                    Wx=all_fitparam(:,3)*pxsize; Wy=all_fitparam(:,6)*pxsize;
                     
                     if yes3d==1
                         % Find the z-location (the output is converted to
                         % pixels here).
                         z_nm=find_astigZ_position2(Wx,Wy,defocusing_param,...
                             max_allowed_D,indRefr_corr);
-                        z_px=z_nm/pxSize;
+                        z_px=z_nm/pxsize;
                         
                         % Find the localization uncertainty associated with
                         % each z-position using a lookup table generated
@@ -364,7 +360,7 @@ for curr_mainfold=1:numel(dnames)
                         % interp1 replaces the Yi-code
                         % find_z_uncertainty_from_LUT
                         z_uncertainty_nm=interp1(z_std_LUT(1,:),z_std_LUT(2,:),z_nm);
-                        z_uncertainty_px=z_uncertainty_nm/pxSize;
+                        z_uncertainty_px=z_uncertainty_nm/pxsize;
                     else
                         z_px=zeros(size(all_fitparam,1),1);
                         z_uncertainty_px=zeros(size(all_fitparam,1),1);
@@ -423,7 +419,7 @@ for curr_mainfold=1:numel(dnames)
                     end
                 end
             end
-        elseif ~yesCheckVals&&yesFitting
+        elseif ~yescheckvals&&yesfitting
             % parallel processing. cannot be used for debugging or changing
             % guessing/fitting parameters. this is identical to the for
             % loop above, except there're no comments to save space
@@ -447,15 +443,15 @@ for curr_mainfold=1:numel(dnames)
                 end
                 [all_fitparam,all_fiterr,guesses{ii}]=fit_asym_gauss_int2(...
                     thisframe,phasemask,1,peak_guessing_params,min_sep);
-                Wx=all_fitparam(:,3)*pxSize; Wy=all_fitparam(:,6)*pxSize;
+                Wx=all_fitparam(:,3)*pxsize; Wy=all_fitparam(:,6)*pxsize;
                 if yes3d
                     % Find the z-location (the output is converted to
                     % pixels here).
                     z_nm=find_astigZ_position2(Wx,Wy,defocusing_param,...
                         max_allowed_D,indRefr_corr);
-                    z_px=z_nm/pxSize;
+                    z_px=z_nm/pxsize;
                     z_uncertainty_nm=interp1(z_std_LUT(1,:),z_std_LUT(2,:),z_nm);
-                    z_uncertainty_px=z_uncertainty_nm/pxSize;
+                    z_uncertainty_px=z_uncertainty_nm/pxsize;
                 else
                     z_px=zeros(size(all_fitparam,1),1);
                     z_uncertainty_px=zeros(size(all_fitparam,1),1);
@@ -522,7 +518,7 @@ for curr_mainfold=1:numel(dnames)
             fullfile(dlocs{curr_mainfold},dnames{curr_mainfold}),goodfitdata);
     end
     
-    if yesPlot
+    if yesplot
         % WRITE FITS FIG Plot 3D Localization (Without Gaussian-Blur)
         Plot_3D_fits2(goodfitdata,3,49,...
             [fullfile(dlocs{curr_mainfold},dnames{curr_mainfold}),'_fits.fig']);
@@ -532,13 +528,13 @@ for curr_mainfold=1:numel(dnames)
     %  ------------------------------------------------------------------------
     
     % if tracking is disabled
-    if any(ismember(mnamelist,'trackfile'))&&~yesTracking
+    if any(ismember(mnamelist,'trackfile'))&&~yestracking
         trfile=m.trackfile;
         
     % if tracking is enforced
-    elseif yesTracking
+    elseif yestracking
         
-        if yesPhasemasks            % if phasemasks are used
+        if yesphasemasks            % if phasemasks are used
             % plot 2D tracks
             img=imread(fullfile(plocs{curr_mainfold},[pnames{curr_mainfold},...
                 pexts{curr_mainfold}]),'tif');
@@ -552,7 +548,7 @@ for curr_mainfold=1:numel(dnames)
         img=kron(img,ones(magfactor));
         
         % TRACKING
-        if yesPlot
+        if yesplot
             fprintf(['tracking file named: ' dnames{curr_mainfold} '.\n'])
         end
         
@@ -569,7 +565,7 @@ for curr_mainfold=1:numel(dnames)
                 % if yescheckvals is enabled and any of the trackparams
                 % saved in the analysis file differ from those at the top
                 % of this function.
-                if yesCheckVals&&any(temptrackparams~=trackparams)
+                if yescheckvals&&any(temptrackparams~=trackparams)
                     useold=input('use tracking params from analysis file?');
                     if ~useold
                         trackparams=temptrackparams;
@@ -589,12 +585,12 @@ for curr_mainfold=1:numel(dnames)
             alpha=-log(trackparams(1))/trackparams(4);
             trfile=Track_3D2(goodfitdata,sROI,tROI,trackparams(1),...
                 alpha,trackparams(3),trackparams(5),trackparams(6),...
-                pxSize,trackparams(7),trackparams(2));
+                pxsize,trackparams(7),trackparams(2));
             
             if isempty(trfile)
                 fprintf(['No available tracks for ''',dnames{curr_mainfold}...
                     '''. Check tracking parameters.\n']);
-            elseif yesPlot
+            elseif yesplot
                 trfile=trfile*magfactor;
                 
                 hastrack=unique(trfile(:,1))';
@@ -634,9 +630,9 @@ for curr_mainfold=1:numel(dnames)
                         % If the current track meets the length
                         % requirement.
                         if (tr_end_row-tr_start_row+1)>=min_tr_length
-                            plot3(trfile(tr_start_row:tr_end_row,4)*pxSize,...
-                                trfile(tr_start_row:tr_end_row,5)*pxSize,...
-                                trfile(tr_start_row:tr_end_row,15)*pxSize,...
+                            plot3(trfile(tr_start_row:tr_end_row,4)*pxsize,...
+                                trfile(tr_start_row:tr_end_row,5)*pxsize,...
+                                trfile(tr_start_row:tr_end_row,15)*pxsize,...
                                 'Color','r');
                             hold all
                         end
@@ -651,7 +647,7 @@ for curr_mainfold=1:numel(dnames)
             end
             
             % end while loop if not checking values
-            if ~yesCheckVals
+            if ~yescheckvals
                 counter=2;
             else
                 % prompt user for parameter changes
@@ -682,21 +678,12 @@ for curr_mainfold=1:numel(dnames)
             
             % WRITE MP4 MOVIE OF FITS
             Viewfits3([fullfile(dlocs{curr_mainfold},dnames{curr_mainfold}),'.bin'],...
-                goodfitdata,guesses,trfile,7,frameRate);
+                goodfitdata,guesses,trfile,7,framerate);
         else
             fprintf(['The fit file for ''', dnames{curr_mainfold},...
                 ''' does not exist or contains no data. Skip producing ',...
                 'ViewFits files. \n']);
         end
-    end
-    
-    if makeXls
-        tstr=[{'Frame'} {'Molecule'} {'Amplitude'} {'+/-'} {'Offset'}...
-            {'+/-'} {'X-Width'} {'+/-'} {'X Center'} {'+/-'}  {'Y Center'}...
-            {'+/-'} {'Good Fit?'} {'Integral'} {'Small box width'}...
-            {'Y-Width'} {'+/-'} {'Wx/Wy'} {'Z Center'} {'+/-'} {'Cell No'}...
-            {'sROI'} {'tROI'}];% {'distance from center'}];
-        xlswrite([dnames{curr_mainfold}],cat(1,tstr,num2cell(goodfitdata)))
     end
 end
 end
