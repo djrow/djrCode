@@ -13,10 +13,11 @@ function goodfitdata=masterfit2(mainfold,yescheckvals,yesfitting)
 %  User-Defined Parameters
 %  ------------------------------------------------------------------------
 
-% run peak fitting in parallel. set this to 0 if you need to fix the peak
-% guessing or fitting parameters. checkvals=0;
+% Pixel size in nm.
+pxsize=49;
 
-% run fitting? yesfitting=0;
+% camera capture rate in 1/s
+frameRate=25;
 
 % run tracking?
 yestracking=1;
@@ -42,7 +43,7 @@ yes3d=0;
 yespovray=0;
 
 % make xls file from goodfitdata
-makeXls=1;
+makeXls=0;
 
 % remove activation?
 removeactivation=0;
@@ -80,12 +81,6 @@ min_sep=5;
 width_lb=1;
 width_ub=15;
 width_error_ub=5;
-
-% Pixel size in nm.
-pxsize=49;
-
-% camera capture rate in 1/s
-framerate=25;
 
 % The maximum allowable separation (nm) of an input width pair and the 2
 % defocusing calibration curves. Fits falling too far from the calibration
@@ -176,10 +171,12 @@ end
 
 % WRITE BACKGROUND SUBTRACTED BINARY FILE
 if yesbgroundsub
-    h1=waitbar(0);
     bFiles=dir([dataloc,'*_bgsub.bin']);
     for ii=1:numel(dlocs);
-        if ~any(ismember({bFiles.name},[dnames{ii},'_bgsub.bin']))
+        if ~any(ismember({bFiles.name},[dnames{ii},'_bgsub.bin']))&&...
+                ~any(ismember({bFiles.name},dnames{ii}))
+            h1=waitbar(0);
+            
             fid=fopen([fullfile(dlocs{ii},dnames{ii}) '_bgsub.bin'],'W');
             [~,nframes,sz]=bingetframes([fullfile(dlocs{ii},dnames{ii}),'.bin'],1,[]);
             
@@ -200,10 +197,10 @@ if yesbgroundsub
             fwrite(fid,nframes,'double');
             
             fclose(fid);
+            
+            % rename the data file names
+            dnames{ii}=[dnames{ii},'_bgsub'];
         end
-        
-        % rename the data file names
-        dnames{ii}=[dnames{ii},'_bgsub'];
     end
     try
         close(h1)
@@ -680,7 +677,7 @@ for curr_mainfold=1:numel(dnames)  % Loop each movie for guessing/fitting/tracki
             
             % WRITE MP4 MOVIE OF FITS
             Viewfits3([fullfile(dlocs{curr_mainfold},dnames{curr_mainfold}),'.bin'],...
-                goodfitdata,guesses,trfile,7,framerate);
+                goodfitdata,guesses,trfile,7,frameRate);
         else
             fprintf(['The fit file for ''', dnames{curr_mainfold},...
                 ''' does not exist or contains no data. Skip producing ',...
