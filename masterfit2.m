@@ -416,7 +416,7 @@ for curr_mainfold=1:numel(dnames)
                             (all_fitparam(:,3)<width_ub).*... % LB < x-width < UB
                             (all_fitparam(:,6)>width_lb).*...
                             (all_fitparam(:,6)<width_ub).*... % LB < y-width < UB
-                            raw_fitdata(:,21).*... % Within cell boundaries
+                            raw_fitdata(:,21)>0.*... % Within cell boundaries
                             ~isnan(z_px(valid_param_rows));  % Non-NaN z-position
                         
                         goodfitdata{ii}=raw_fitdata(raw_fitdata(:,13)==1,:);
@@ -488,7 +488,7 @@ for curr_mainfold=1:numel(dnames)
                         (all_fitparam(:,3)<width_ub).*... % LB < x-width < UB
                         (all_fitparam(:,6)>width_lb).*...
                         (all_fitparam(:,6)<width_ub).*... % LB < y-width < UB
-                        raw_fitdata(:,21).*... % Within cell boundaries
+                        raw_fitdata(:,21)>0.*... % Within cell boundaries
                         ~isnan(z_px(valid_param_rows));  % Non-NaN z-position
                     
                     goodfitdata{ii}=raw_fitdata(raw_fitdata(:,13)==1,:);

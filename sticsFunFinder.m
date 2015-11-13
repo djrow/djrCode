@@ -1,5 +1,6 @@
 function [sticsFun,msdFun,pId]=sticsFunFinder(nDiffs,immPop,dType,th)
-g1=@(x,y,p)p(1)*exp(-((x(:,:,1)-p(2)).^2+(x(:,:,2)-p(3)).^2)./(2*y))./(2*pi*y);
+g1=@(x,y,p)p(1)*exp(-((x(:,:,1)-p(2)).^2+...
+    (x(:,:,2)-p(3)).^2)./(2*y))./(2*pi*y);
 
 switch immPop
     case 0 % no immobile term
@@ -107,7 +108,7 @@ end
 %% square confinement model
 function z=longmsd1d(p,x)
 % global camerasd
-d=p(1); l=p(2); tau=x;
+d=abs(p(1)); l=p(2); tau=x;
 
 summedterm=@(t,d,l,n)1/n^4*exp(-(n*pi/l).^2*d*t);
 

@@ -29,7 +29,7 @@ fun{4}=@(x,y)padmean(x,y);      % pad every image with its mean
 fun{5}=@(x,y)padzero(x,y);      % pad every image with zero
 
 % apply filters in arbitrary order
-for ii=whichfun(whichfun~=1)
+for ii=whichfun(whichfun~=4)
     imstack=fun{ii}(imstack,mask);
 end
 

@@ -34,14 +34,14 @@ if ~isstruct(dType)
     mpp=.049;
     
     % number of total steps taken
-    nSteps=1e4;
+    nSteps=1e3;
     
     % diffusion coefficients in microns^2/s
     d1=.1;
-    d2=.01;
+    d2=.1;
     
     % fraction of total steps taken by each diffusing population
-    d1Frac=.5;
+    d1Frac=1/3;
     d2Frac=1/3;
     
     % confinement lengths in each dimension in microns
@@ -120,17 +120,17 @@ end
 tr=cellfun(@(x,n)organize(x,n),tr,num2cell(1:numel(tr)),'uniformoutput',0);
 
 % plot trajectories on top of each other
-for ii=1:numel(tr)
-    plot(tr{ii}(:,4),tr{ii}(:,5))
-    hold all
-end
-if dType>8
-    line([0,cLength1,cLength1,0,0],[0,0,cLength2,cLength2,0],'color','k');
-end
-hold off
-axis image
-axis([-.1,cLength1+.1,-.1,cLength2+.1])
-title(diffusionTitles{dType})
+% for ii=1:numel(tr)
+%     plot(tr{ii}(:,5),tr{ii}(:,4))
+%     hold all
+% end
+% if dType>8
+%     line([0,cLength2,cLength2,0,0],[0,0,cLength1,cLength1,0],'color','k');
+% end
+% hold off
+% axis image
+% axis([-.1,cLength2+.1,-.1,cLength1+.1])
+% title(diffusionTitles{dType})
 
 % concatenate tracks into one matrix
 tr=cat(1,tr{:});
