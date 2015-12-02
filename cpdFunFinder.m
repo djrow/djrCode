@@ -1,52 +1,57 @@
-function [cpdFun,msdFun,pstart,cpdLB,cpdUB]=cpdFunFinder(dim,nDiffs,immPop,dType,pstart)
+function [cpdFun,msdFun,pId]=cpdFunFinder(dim,nDiffs,immPop,dType)
+% this code creates the correct anonymous functions to be used by cpdGlobal
+% given the dimensionality (1 or 2), the number of diffusive populations (1
+% or 2), the presence or absence of an immobile population (0 or 1), and
+% the diffusion type ('unconfined' or 'confined').
+
+% partial cpd function
+c1=@(x,y,p)p*exp(-x./y);
+
+% 2d confined msd function
+m2=@(t,p)4*p(1)*t+p(2);
+
+% 1d unconfined msd function
+m1=@(t,p)2*p(1)*t+p(2);
+
 switch dim
-    case 2 % 2D diffusion
+    case 2
+        %% 2D diffusion
         switch immPop
             case 0 % no immobile term
                 switch nDiffs
                     case 1 % 1 diffuser
                         switch dType
                             case 'unconfined' % 1 unconfined diffuser in 2D
-                                cpdFun=@(x,y,p)1-exp(-x./y);
-                                msdFun=@(tau,p)4*p(1)*tau+p(2);
-                                
-                                if isempty(pstart)
-                                    pstart=[.1,eps];
-                                end
-                                cpdLB=[0,-inf];
-                                cpdUB=[inf,inf];
+                                msdFun=@(tau,p)...
+                                    m2(tau,p(1:2));
+                                cpdFun=@(x,y,p)1-...
+                                    c1(x,y,1);
+                                pId=[1,3];
                             case 'confined' % 1 confined diffuser in 2D
-                                cpdFun=@(x,y,p)1-exp(-x./y);
-                                msdFun=@(tau,p)abs(longmsd2d(p(1:3),tau));
-                                
-                                if isempty(pstart)
-                                    pstart=[.1,1,eps];
-                                end
-                                cpdLB=[0,0,-inf];
-                                cpdUB=[inf,inf,inf];
+                                msdFun=@(tau,p)...
+                                    confMSD2(p(1:3),tau);
+                                cpdFun=@(x,y,p)1-...
+                                    c1(x,y,1);
+                                pId=1:3;
                         end
                     case 2 % 2 diffusers
                         switch dType
                             case 'unconfined' % 2 unconfined diffusers in 2D
-                                cpdFun=@(x,y,p)1-p(5)*exp(-x./y(1))-(1-p(5))*exp(-x./y(2));
-                                msdFun=@(tau,p)cat(1,4*p(1)*tau+p(2),4*p(3)*tau+p(4));
-                                
-                                if isempty(pstart)
-                                    pstart=[.1,eps,.01,eps,.5];
-                                end
-                                cpdLB=[0,-inf,0,-inf,0];
-                                cpdUB=[inf,inf,inf,inf,1];
+                                msdFun=@(tau,p)cat(1,...
+                                    m2(tau,p(1:2)),...
+                                    m2(tau,p(3:4)));
+                                cpdFun=@(x,y,p)1-...
+                                    c1(x,y(1),p(5))-...
+                                    c1(x,y(2),1-p(5));
+                                pId=[1,3:6];
                             case 'confined' % 2 confined diffusers in 2D
-                                
-                                cpdFun=@(x,y,p)1-p(7)*exp(-x./y(1))-(1-p(7))*exp(-x./y(2));
-                                msdFun=@(tau,p)cat(1,longmsd2d(p(1:3),tau),...
-                                    longmsd(p(4:6),tau));
-                                
-                                if isempty(pstart)
-                                    pstart=[.1,.5,eps,.01,.5,eps,.5];
-                                end
-                                cpdLB=[0,0,-inf,0,0,-inf,0];
-                                cpdUB=[inf,inf,inf,inf,1,inf];
+                                msdFun=@(tau,p)cat(1,...
+                                    confMSD2(tau,p(1:3)),...
+                                    confMSD2(tau,p([4,2,5])));
+                                cpdFun=@(x,y,p)1-...
+                                    c1(x,y(1),p(6))-...
+                                    c1(x,y(2),1-p(6));
+                                pId=1:6;
                         end
                 end
             case 1 % 1 immobile term
@@ -54,102 +59,82 @@ switch dim
                     case 1 % 1 diffuser
                         switch dType
                             case 'unconfined' % 1 unconfined diffuser with 1 immobile population in 2D
-                                cpdFun=@(x,y,p)1-p(3)*exp(-x./(y+p(4)))-...
-                                    (1-p(3))*exp(-x./p(4));
-                                msdFun=@(tau,p)4*p(1)*tau+p(2);
-                                
-                                if isempty(pstart)
-                                    pstart=[.1,eps,.3,1e-3];
-                                end
-                                cpdLB=[0,-inf,0,0];
-                                cpdUB=[inf,inf,1,inf];
+                                msdFun=@(tau,p)...
+                                    m2(tau,p(1:2));
+                                cpdFun=@(x,y,p)1-...
+                                    c1(x,y+p(4),p(3))-...
+                                    c1(x,p(4),1-p(3));
+                                pId=[1,3,6,8];
                             case 'confined' % 1 confined diffuser with 1 immobile population in 2D
-                                
-                                cpdFun=@(x,y,p)1-p(4)*exp(-x./(y+p(5)))-...
-                                    (1-p(4))*exp(-x./p(5));
-                                msdFun=@(tau,p)longmsd2d(p(1:3),tau);
-                                
-                                if isempty(pstart)
-                                    pstart=[.1,.5,eps,.5,1e-3];
-                                end
-                                cpdLB=[0,0,-inf,0,0,-inf,0,0,0];
-                                cpdUB=[inf,inf,inf,inf,inf,inf,1,1,inf];
+                                msdFun=@(tau,p)cat(1,...
+                                    confMSD2(tau,p(1:3)),...
+                                    confMSD2(tau,p([4,2,5])));
+                                cpdFun=@(x,y,p)1-...
+                                    c1(x,y+p(7),p(6))-...
+                                    c1(x,p(7),1-p(6));
+                                pId=[1:6,8];
                         end
                     case 2 % 2 diffusers
                         switch dType
                             case 'unconfined' % 2 unconfined diffusers with 1 immobile population in 2D
-                                cpdFun=@(x,y,p)1-p(5)*exp(-x./(y+p(7)))-...
-                                    p(6)*exp(-x./(y+p(7)))-(1-p(5)-p(6))*exp(-x./p(7));
-                                msdFun=@(tau,p)cat(1,4*p(1)*tau+p(2),4*p(3)*tau+p(4));
-                                
-                                if isempty(pstart)
-                                    pstart=[.1,eps,.01,eps,.3,.3,1e-3];
-                                end
-                                cpdLB=[0,-inf,0,-inf,0,0,0];
-                                cpdUB=[inf,inf,inf,inf,1,1,inf];
+                                msdFun=@(tau,p)cat(1,...
+                                    m2(tau,p(1:2)),...
+                                    m2(tau,p(3:4)));
+                                cpdFun=@(x,y,p)1-...
+                                    c1(x,y(1)+p(7),p(5))-...
+                                    c1(x,y(2)+p(7),p(6))-...
+                                    c1(x,p(7),1-p(5)-p(6));
+                                pId=[1,3:8];
                             case 'confined' % 2 confined diffusers with 1 immobile population in 2D
-                                
-                                cpdFun=@(x,y,p)1-p(7)*exp(-x./(y+p(9)))-...
-                                    p(8)*exp(-x./(y+p(9)))-(1-p(7)-p(8))*exp(-x./p(9));
-                                msdFun=@(tau,p)cat(1,longmsd2d(p(1:3),tau),longmsd2d(p(4:6),tau));
-                                
-                                if isempty(pstart)
-                                    pstart=[.1,.5,eps,.01,.5,eps,.3,.3,1e-3];
-                                end
-                                cpdLB=[0,0,-inf,0,0,-inf,0,0,0];
-                                cpdUB=[inf,inf,inf,inf,inf,inf,1,1,inf];
+                                msdFun=@(tau,p)cat(1,...
+                                    confMSD2(tau,p(1:3)),...
+                                    confMSD2(tau,p([4,2,5])));
+                                cpdFun=@(x,y,p)1-...
+                                    c1(x,y(1)+p(8),p(6))-...
+                                    c1(x,y(2)+p(8),p(7))-...
+                                    c1(x,p(8),1-p(6)-p(7));
+                                pId=1:8;
                         end
                 end
         end
-    case 1 % 1D diffusion
+    case 1
+        %% 1D diffusion
         switch immPop
             case 0 % no immobile term
                 switch nDiffs
                     case 1 % 1 diffuser
                         switch dType
                             case 'unconfined' % 1 unconfined diffuser in 1D
-                                cpdFun=@(x,y,p)erf(sqrt(x./(2*abs(y))));
-                                msdFun=@(tau,p)2*p(1)*tau+p(2);
-                                
-                                if isempty(pstart)
-                                    pstart=[.1,eps];
-                                end
-                                cpdLB=[0,-inf];
-                                cpdUB=[inf,inf];
+                                msdFun=@(tau,p)...
+                                    m1(tau,p(1:2));
+                                cpdFun=@(x,y,p)1-...
+                                    c1(x,y,1);
+                                pId=[1,3];
                             case 'confined' % 1 confined diffuser in 1D
-                                cpdFun=@(x,y,p)erf(sqrt(x./(2*abs(y))));
-                                msdFun=@(tau,p)longmsd1d(p(1:3),tau);
-                                
-                                if isempty(pstart)
-                                    pstart=[.1,.5,eps];
-                                end
-                                cpdLB=[0,0,-inf];
-                                cpdUB=[inf,inf,inf];
+                                msdFun=@(tau,p)...
+                                    confMSD1(p(1:3),tau);
+                                cpdFun=@(x,y,p)1-...
+                                    c1(x,y,1);
+                                pId=1:3;
                         end
                     case 2 % 2 diffusers
                         switch dType
                             case 'unconfined' % 2 unconfined diffusers in 1D
-                                cpdFun=@(x,y,p)p(5)*erf(sqrt(x./(2*abs(y(1)))))+...
-                                    (1-p(5))*erf(sqrt(x./(2*abs(y(2)))));
-                                msdFun=@(tau,p)cat(1,2*p(1)*tau+p(2),2*p(3)*tau+p(4));
-                                
-                                if isempty(pstart)
-                                    pstart=[.1,eps,.01,eps,.3,.3,1e-3];
-                                end
-                                cpdLB=[0,-inf,0,-inf,0];
-                                cpdUB=[inf,inf,inf,inf,1];
+                                msdFun=@(tau,p)cat(1,...
+                                    m2(tau,p(1:2)),...
+                                    m2(tau,p(3:4)));
+                                cpdFun=@(x,y,p)1-...
+                                    c1(x,y(1),p(5))-...
+                                    c1(x,y(2),1-p(5));
+                                pId=[1,3:6];
                             case 'confined' % 2 confined diffusers in 1D
-                                
-                                cpdFun=@(x,y,p)p(7)*erf(sqrt(x./(2*abs(y(1)))))+...
-                                    (1-p(7))*erf(sqrt(x./(2*y(2))));
-                                msdFun=@(tau,p)cat(1,longmsd1d(p(1:3),tau),...
-                                    longmsd2d(p(4:6),tau));
-                                
-                                if isempty(pstart)
-                                    pstart=[.1,.5,eps,.01,.5,eps,.5];
-                                end
-                                cpdLB=[0,0,-inf,0,0,-inf,0];
-                                cpdUB=[inf,inf,inf,inf,1,inf];
+                                msdFun=@(tau,p)cat(1,...
+                                    confMSD2(tau,p(1:3)),...
+                                    confMSD2(tau,p([4,2,5])));
+                                cpdFun=@(x,y,p)1-...
+                                    c1(x,y(1),p(6))-...
+                                    c1(x,y(2),1-p(6));
+                                pId=1:6;
                         end
                 end
             case 1 % 1 immobile term
@@ -157,71 +142,51 @@ switch dim
                     case 1 % 1 diffuser
                         switch dType
                             case 'unconfined' % 1 unconfined diffuser with 1 immobile population in 1D
-                                cpdFun=@(x,y,p)p(3)*erf(sqrt(x./(2*(abs(y)+p(4)))))+...
-                                    (1-p(3))*erf(sqrt(x./(2*p(4))));
-                                msdFun=@(tau,p)2*p(1)*tau+p(2);
-                                
-                                if isempty(pstart)
-                                    pstart=[.1,eps,.3,1e-3];
-                                end
-                                cpdLB=[0,-inf,0,0];
-                                cpdUB=[inf,inf,1,inf];
+                                msdFun=@(tau,p)...
+                                    m1(tau,p(1:2));
+                                cpdFun=@(x,y,p)1-...
+                                    c1(x,y+p(4),p(3))-...
+                                    c1(x,p(4),1-p(3));
+                                pId=[1,3,6,8];
                             case 'confined' % 1 confined diffuser with 1 immobile population in 1D
-                                
-                                cpdFun=@(x,y,p)p(4)*erf(sqrt(x./(2*(abs(y)+p(5)))))+...
-                                    (1-p(4))*erf(sqrt(x./(2*p(5))));
-                                msdFun=@(tau,p)longmsd1d(p(1:3),tau);
-                                
-                                if isempty(pstart)
-                                    pstart=[.1,.5,eps,.5,1e-3];
-                                end
-                                cpdLB=[0,0,-inf,0,0,-inf,0,0,0];
-                                cpdUB=[inf,inf,inf,inf,inf,inf,1,1,inf];
+                                msdFun=@(tau,p)cat(1,...
+                                    confMSD1(tau,p(1:3)),...
+                                    confMSD1(tau,p([4,2,5])));
+                                cpdFun=@(x,y,p)1-...
+                                    c1(x,y+p(7),p(6))-...
+                                    c1(x,p(7),1-p(6));
+                                pId=[1:6,8];
                         end
                     case 2 % 2 diffusers
                         switch dType
                             case 'unconfined' % 2 unconfined diffusers with 1 immobile population in 1D
-                                cpdFun=@(x,y,p)p(5)*erf(sqrt(x./(2*(abs(y)+p(7)))))+...
-                                    p(6)*erf(sqrt(x./(2*(abs(y)+p(7)))))+...
-                                    (1-p(5)-p(6))*erf(sqrt(x./(2*p(7))));
-                                msdFun=@(tau,p)cat(1,2*p(1)*tau+p(2),2*p(3)*tau+p(4));
-                                
-                                if isempty(pstart)
-                                    pstart=[.1,eps,.01,eps,.3,.3,1e-3];
-                                end
-                                cpdLB=[0,-inf,0,-inf,0,0,0];
-                                cpdUB=[inf,inf,inf,inf,1,1,inf];
+                                msdFun=@(tau,p)cat(1,...
+                                    m1(tau,p(1:2)),...
+                                    m1(tau,p(3:4)));
+                                cpdFun=@(x,y,p)1-...
+                                    c1(x,y(1)+p(7),p(5))-...
+                                    c1(x,y(2)+p(7),p(6))-...
+                                    c1(x,p(7),1-p(5)-p(6));
+                                pId=[1,3,4:8];
                             case 'confined' % 2 confined diffusers with 1 immobile population in 1D
-                                
-                                cpdFun=@(x,y,p)p(7)*erf(sqrt(x./(2*(abs(y)+p(9)))))+...
-                                    p(8)*erf(sqrt(x./(2*(abs(y)+p(9)))))+...
-                                    (1-p(7)-p(8))*erf(sqrt(x./(2*p(9))));
-                                msdFun=@(tau,p)cat(1,longmsd1d(p(1:3),tau),longmsd1d(p(4:6),tau));
-                                
-                                if isempty(pstart)
-                                    pstart=[.1,.5,eps,.01,.5,eps,.3,.3,1e-3];
-                                end
-                                cpdLB=[0,0,-inf,0,0,-inf,0,0,0];
-                                cpdUB=[inf,inf,inf,inf,inf,inf,1,1,inf];
+                                msdFun=@(tau,p)cat(1,...
+                                    confMSD1(tau,p(1:3)),...
+                                    confMSD1(tau,p([4,5,2])));
+                                cpdFun=@(x,y,p)1-...
+                                    c1(x,y(1)+p(8),p(6))-...
+                                    c1(x,y(2)+p(8),p(7))-...
+                                    c1(x,p(8),1-p(6)-p(7));
+                                pId=1:8;
                         end
                 end
         end
 end
-
-% % gooooooooooood luck figuring this out. linCell linearizes a cell array
-% % into a single 1D vector. linCell and longmsd both have to be aux
-% % functions in the code that fHandle and eHandle are used in.
-% fHandle=@(p,tau,sqSteps,ranks)linCell(cellfun(@(x,y)x-y,...
-%     cellfun(@(x,y)cpdFun(x,y,p),sqSteps,num2cell(msdFun(tau,p),1)',...
-%     'uniformoutput',0),ranks,'uniformoutput',0));
-% eHandle=@(p,tau,sqSteps)cellfun(@(x,y)cpdFun(x,y,p),...
-%     sqSteps,num2cell(msdFun(tau,p))','uniformoutput',0);
 end
 
 %% square confinement model
-function z=longmsd2d(p,x)
+function z=confMSD2(tau,p)
 % global camerasd
-d=p(1); l=p(2); tau=x;
+d=p(1); l=p(2);
 
 summedterm=@(t,d,l,n)1/n^4*exp(-(n*pi/l).^2*d*t);
 
@@ -237,9 +202,9 @@ z=l^2/3*(1-96/pi^4*temp)+p(3);
 end
 
 %% square confinement model
-function z=longmsd1d(p,x)
+function z=confMSD1(tau,p)
 % global camerasd
-d=p(1); l=p(2); tau=x;
+d=p(1); l=p(2);
 
 summedterm=@(t,d,l,n)1/n^4*exp(-(n*pi/l).^2*d*t);
 

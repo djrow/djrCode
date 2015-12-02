@@ -105,6 +105,7 @@ xp(:,:,2)=-(x(:,:,1)-mean(mean(x(:,:,1))))*sin(th)+(x(:,:,2)-mean(mean(x(:,:,2))
 
 z=p(1)*exp(-(xp(:,:,1)-p(2)).^2/2/y(1)-(xp(:,:,2)-p(3)).^2./2/y(2))./(2*pi*sqrt(y(1)*y(2)));
 end
+
 %% square confinement model
 function z=longmsd1d(p,x)
 % global camerasd

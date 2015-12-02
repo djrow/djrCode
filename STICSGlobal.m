@@ -29,7 +29,7 @@ tau=(startTau:maxTau)*intTime;
 % rotation angle
 th=0;
 
-% Choose the functions for fitting
+%% Choose the functions for fitting
 pStart=[.1,.5,.01,1,.01,...  % msd 1 parameters      D1, L1, S1, L2, S2
     .1,.01,.01,...          % msd 2 parameters      D2, S3, S4
     0,.01,0,0,.01,.01,.01]; % correlation function parameters:

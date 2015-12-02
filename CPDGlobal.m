@@ -46,9 +46,6 @@ yesOverlap=1;
 % minimum track length (integer)
 minTrLength=5;
 
-% starting values for the fit. leave blank unless you know what you're doing
-pStart=[];
-
 % aux function
 linCell=@(x)cat(1,x{:});
 
@@ -56,14 +53,36 @@ linCell=@(x)cat(1,x{:});
 plotTau=1:maxTau;
 
 %% Choose the functions for fitting
-[cpdFun,msdFun,pStart,cpdLB,cpdUB]=cpdFunFinder(dim,nDiffs,immPop,msdModel,pStart);
+pStart= [.1,.5,.01,...          % msd 1 parameters D1, L, S1
+        .01,.01,...             % msd 2 parameters D2, S2
+        .3,.3,.01];             % cpd function parameters:
+                                % amp1, amp2, immSize
+cpdLB=zeros(1,numel(pStart));
+cpdLB([3,5])=-inf;
+
+cpdUB=inf(1,numel(pStart));
+
+% restricted maximum size of diffusion coefficient in microns^2/sec
+cpdUB([1,4])=10;
+
+% restricted maximum size of confinement in microns
+cpdUB([2,4])=20;
+
+[cpdFun,msdFun,pId]=cpdFunFinder(dim,nDiffs,immPop,msdModel);
+pStart=pStart(pId);
+cpdLB=cpdLB(pId);
+cpdUB=cpdUB(pId);
+ds=ismember(pId,[1,4]);
+amps=ismember(pId,[6,7]);
 
 % gooooooooooood luck figuring this out. linCell linearizes a cell array
 % into a single 1D vector. linCell and longmsd both have to be aux
 % functions in the code that fHandle and eHandle are used in.
-fHandle=@(p,tau,sqSteps,ranks)linCell(cellfun(@(x,y)x-y,...
-    cellfun(@(x,y)cpdFun(x,y,p),sqSteps,num2cell(msdFun(tau,p),1)',...
-    'uniformoutput',0),ranks,'uniformoutput',0));
+fHandle=@(p,tau,sqSteps,ranks)linCell(...
+    cellfun(@(x,y)x-y,...
+    cellfun(@(x,y)cpdFun(x,y,p),...
+    sqSteps,num2cell(msdFun(tau,p),1)','uniformoutput',0),...
+    ranks,'uniformoutput',0));
 eHandle=@(p,tau,sqSteps)cellfun(@(x,y)cpdFun(x,y,p),...
     sqSteps,num2cell(msdFun(tau,p),1)','uniformoutput',0);
 
@@ -154,8 +173,7 @@ tau=(1:maxTau)*intTime;
 %% Fit the cpd curves to get the diffusion coefficient
 x=lsqnonlin(@(p)fHandle(p,tau,sqSteps,ranks),pStart,cpdLB,cpdUB);
 
-d=x(1:2+strcmp(msdModel,'confined'):numel(x));
-d=d(1:nDiffs);
+d=x(ds);
 
 %% Plot the results
 fRanks=eHandle(x,tau,sqSteps);
