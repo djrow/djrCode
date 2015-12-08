@@ -202,8 +202,11 @@ if yesbgroundsub&&yesFitting
             
             % rename the data file names
             dnames{ii}=[dnames{ii},'_bgsub'];
+            end
+        else
+            % rename the data file names
+            dnames{ii}=[dnames{ii},'_bgsub'];
         end
-    end
     try
         close(h1)
     end
@@ -681,8 +684,13 @@ for curr_mainfold=1:numel(dnames)
                 fullfile(dlocs{curr_mainfold},dnames{curr_mainfold}),'''...\n'])
             
             % WRITE MP4 MOVIE OF FITS
-            Viewfits3([fullfile(dlocs{curr_mainfold},dnames{curr_mainfold}),'.bin'],...
-                goodfitdata,guesses,trfile,7,frameRate);
+            if yesbgroundsub&&~viewfits_onBGSUB
+                Viewfits3([fullfile(dlocs{curr_mainfold},dnames{curr_mainfold}(1:(end-6))),'.bin'],...
+                    goodfitdata,guesses,trfile,7,frameRate);
+            else
+                Viewfits3([fullfile(dlocs{curr_mainfold},dnames{curr_mainfold}),'.bin'],...
+                    goodfitdata,guesses,trfile,7,frameRate);
+            end
         else
             fprintf(['The fit file for ''', dnames{curr_mainfold},...
                 ''' does not exist or contains no data. Skip producing ',...

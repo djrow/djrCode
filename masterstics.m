@@ -19,16 +19,16 @@ phasemasks=0;
 skipselect=0;
 
 % calculate correlation functions from data?
-yesStics=1;
+yesStics=0;
 
 % fit the correlation function to estimate various observable phenomena
-yesGauss=1;
+yesGauss=0;
 
 % use local or global fit
-localFit=0;
+localFit=1;
 
 % show the result of the fitting
-showFitting=1;
+showFitting=0;
 
 %
 nDiffs=1;
@@ -111,7 +111,7 @@ if yesStics==1
 end
 
 % Choose the functions for fitting
-[corrFun,msdFun,pStart,corrLB,corrUB]=sticsFunFinder(nDiffs,immPop,diffModel,pStart);
+% [corrFun,msdFun,pStart,corrLB,corrUB]=sticsFunFinder(nDiffs,immPop,diffModel,pStart);
 
 % gooooooooooood luck figuring this out. nanLinCell linearizes a cell array
 % into a single 1D vector. nanLinCell and longmsd both have to be aux
@@ -458,24 +458,24 @@ cellLengths=cell(1,numel(dlocs));
 infomatCell=cell(1,numel(dlocs));
 nrmse=cell(1,numel(dlocs));
 p95=cell(1,numel(dlocs));
-nframes=cell(1,numel(dlocs));
+% nframes=cell(1,numel(dlocs));
 
 fprintf('loading msd data\n')
-parfor jj=1:numel(dlocs)
-    m=matfile([fullfile(dlocs{jj},dnames{jj}),'_analysis.mat']);
+for jj=1:numel(dlocs)
+    n=[fullfile(dlocs{jj},dnames{jj}),'_analysis.mat'];
+    m=matfile(['T' n(2:end)]);
     msds{jj}=m.pgauss.^2*2*mpp^2;
     cellLengths{jj}=m.leng;
     nrmse{jj}=m.nrmse;
     p95{jj}=m.p95;
-    nframes{jj}=m.nframes;
-    infomatCell{jj}=infomat(jj*ones(1,size(nframes{jj},2)),:);
-    
+%     nframes{jj}=m.nframes;
+    infomatCell{jj}=infomat(jj*ones(1,size(cellLengths{jj},2)),:);
 end
 
 cellLengths=cat(2,cellLengths{:})';
-nrmse=cat(1,nrmse{:});
-p95=cat(1,p95{:});
-nframes=cat(2,nframes{:})';
+% nrmse=cat(1,nrmse{:});
+% p95=cat(1,p95{:});
+% nframes=cat(2,nframes{:})';
 
 infomat=cat(1,infomatCell{:});
 infomat=cat(2,infomat,cellLengths);
@@ -483,7 +483,7 @@ infomat=cat(2,infomat,cellLengths);
 msds=cat(1,msds{:});
 
 %% fit msds
-maxTau=15;
+maxTau=10;
 msdp=zeros(size(infomat,1),3,1);
 dest=zeros(size(infomat,1),1);
 msdp95=zeros(size(infomat,1),3,1);
@@ -492,7 +492,7 @@ for jj=1:floor(size(infomat,1))
     intTime=infomat(jj,1)*.001;
     tau=(1:maxTau)*intTime;
     pstart=[cellLengths(jj)-.5,5,.0384];
-    Y=msds(jj,1:maxTau,6);
+    Y=msds(jj,1:maxTau,4);
     
     lb=[0,0,0]; ub=[100,200,100];
     
@@ -513,7 +513,7 @@ end
 output.msdp=msdp;
 output.dEstimate=dest;
 output.msdp95=msdp95;
-output.nframes=nframes;
+% output.nframes=nframes;
 output.cellLengths=cellLengths;
 output.inttime=infomat(:,1)*.001;
 output.infomat=infomat;
