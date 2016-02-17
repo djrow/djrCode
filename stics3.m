@@ -78,7 +78,7 @@ function imgStack=fremfun(imgStack,mask) %#ok<INUSD>
 imsize=size(imgStack);
 immean=mean(imgStack(:));
 
-imgStack=fft(imgStack-mean(imgStack(:)),2*imsize(3)+1,3);
+imgStack=fft(imgStack-mean(imgStack(:)),[],3);
 
 % plot(linspace(0,2/.01,imsize(3)),squeeze(mean(mean(abs(imstack(:,:,1:imsize(3)))))))
 
