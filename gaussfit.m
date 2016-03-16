@@ -1,4 +1,4 @@
-function gaussFit(img,findTheSpot)
+function [mdl,,fitCI]=gaussFit(img,findTheSpot)
 % 
 % NAME:
 %       gaussFit
@@ -73,11 +73,18 @@ elseif nargin
 end
 
 %% loading data
-
 if thereAreNoInputs
     % user input file location
-    imLoc=uigetfile();
-    
+    filterspec='*.'
+    title=
+    file=
+
+    [filename, pathname, filterindex] = uigetfile(filterspec, title, file, 'multiselect','on')
+        
+    if isstr(filename)
+        imLoc={filename}
+    end
+
     % load image
     img=imread(imLoc);
     
@@ -117,7 +124,7 @@ X=cat(2,x(:),y(:));
 
 
 xR=@(x,y,xc,yc,th)(x-xc)*cos(th)-(y-yc)*sin(th);
-% yR=@(x,y,xc,yc,th)(x-xc)*sin(th)+(y-yc)*cos(th);
+yR=@(x,y,xc,yc,th)(x-xc)*sin(th)+(y-yc)*cos(th);
 
 th=pi/2;
 xR=@(x,y,xc,yc)(x-xc)*cos(th)-(y-yc)*sin(th);
