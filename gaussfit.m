@@ -1,10 +1,9 @@
-function [mdl,,fitCI]=gaussFit(img,findTheSpot)
+function [mdl,fitPars,fitCI]=gaussFit(img,findTheSpot)
 % 
 % NAME:
 %       gaussFit
 % PURPOSE:
 %       Fits a generalized gaussian function to 2d imaging data.
-% 
 % CATEGORY:
 %       Image Processing
 % CALLING SEQUENCE:
@@ -12,53 +11,18 @@ function [mdl,,fitCI]=gaussFit(img,findTheSpot)
 % INPUTS:
 %       inputs:         The two-dimensional array to be filtered.
 %       findTheSpot: (optional)    jklhkljhlh
-%
 % OUTPUTS:
-%               []]:    answer.
+%               mdl:    fittin result "object"
+%               
 % PROCEDURE:
 %       1. Data ROI selection of local area 
 %       2. Non-linear least squares minimization for 7-parameter Gaussian 
 %           function on the ROI selected.
 %       3. Find the confidence intervals of all the parameters and various
 %           other outputs
-% NOTES:
-% Performs a bandpass by convolving with an appropriate kernel.  You can
-% think of this as a two part process.  First, a lowpassed image is
-% produced by convolving the original with a gaussian.  Next, a second
-% lowpassed image is produced by convolving the original with a boxcar
-% function. By subtracting the boxcar version from the gaussian version, we
-% are using the boxcar version to perform a highpass.
-% 
-% original - lowpassed version of original => highpassed version of the
-% original
-% 
-% Performing a lowpass and a highpass results in a bandpassed image.
-% 
-% Converts input to double.  Be advised that commands like 'image' display 
-% double precision arrays differently from UINT8 arrays.
-
 % MODIFICATION HISTORY:
 %       Written by David J. Rowland, The University of Michigan, 3/16.
-%
-%       reatly revised version DGG 5/95.
-%
-%       Added /field keyword JCC 12/95.
-% 
-%       Memory optimizations and fixed normalization, DGG 8/99.
-%       Converted to Matlab by D.Blair 4/2004-ish
-%
-%       Fixed some bugs with conv2 to make sure the edges are
-%       removed D.B. 6/05
-%
-%       Removed inadvertent image shift ERD 6/05
-% 
-%       Added threshold to output.  Now sets all pixels with
-%       negative values equal to zero.  Gets rid of ringing which
-%       was destroying sub-pixel accuracy, unless window size in
-%       cntrd was picked perfectly.  Now centrd gets sub-pixel
-%       accuracy much more robustly ERD 8/24/05
-%
-%
+% NOTES:
 %       This code 'gaussFit.m' should be considered 'freeware'- and may be
 %       distributed freely in its original form when properly attributed.  
 
@@ -66,14 +30,7 @@ function [mdl,,fitCI]=gaussFit(img,findTheSpot)
 if ~nargin
     % there are no inputs
     thereAreNoInputs=1;    
-    
-elseif nargin
-    % there are inputs
-    thereAreNoInputs=0;    
-end
 
-%% loading data
-if thereAreNoInputs
     % user input file location
 
     % The filterspec parameter determines the initial display of files in the dialog box.
@@ -94,25 +51,29 @@ if thereAreNoInputs
     % filterindex is 
 
     [filename, pathname, filterindex] = uigetfile(filterspec, title, file, 'multiselect','on')
-        
-    if isstr(filename)
-        imLoc={filename}
+    imLoc={filename}
+    for ii=1:numel(filename)
+        img{ii}=imread(imLoc{ii});
     end
 
-    % load image
-    img=imread(imLoc);
-    
+    if numel(img)==1
+        manyImages=0;
+    else
+        manyImages=1;
+    end
+
     % default behavior: estimate particle location and fit the local area
     findTheSpot=1;
     
-else
-    % the data is an input
-    
-    % default behavior: assume the gaussian shape in the 2d image data is
-    % centered and has a width between 1 and 5 pixels.
+elseif nargin>0
+    % there are inputs
+    thereAreNoInputs=0;
+
     if ~exist('findTheParticle','var')
         findTheSpot=0;
     end
+
+    
 end
 
 %% declaring fitting predicates
@@ -227,7 +188,7 @@ mdl=fitnlm(X,truImg(:),f,pStart);
 fitCI=diff(coefCI(mdl),1,2);
 
 % fitting coefficients
-p=mdl.Coefficients{:,1};
+fitPars=mdl.Coefficients{:,1};
 
 end
 % have a nice day
