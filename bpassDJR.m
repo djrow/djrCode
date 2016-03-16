@@ -1,4 +1,4 @@
-function res = bpass(image_array,lnoise,lobject,threshold,lzero)
+function res = bpassDJR(image_array,lnoise,lobject,threshold,lzero)
 % 
 % NAME:
 %               bpass
@@ -83,6 +83,10 @@ function res = bpass(image_array,lnoise,lobject,threshold,lzero)
 %       This code 'bpass.pro' is copyright 1997, John C. Crocker and 
 %       David G. Grier.  It should be considered 'freeware'- and may be
 %       distributed freely in its original form when properly attributed.  
+%
+%
+% 2016 edits by David J. Rowland, The University of Michigan:
+% added lzero to the input list instead of just declaring it inside the function.
 
 if nargin < 3, lobject = false; end
 if nargin < 4, threshold = 0; end

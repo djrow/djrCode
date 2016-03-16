@@ -1,4 +1,4 @@
-function gaussFit(img,findTheSpot)
+function gaussFit(inputs,findTheSpot)
 % 
 % NAME:
 %       gaussFit
@@ -11,10 +11,15 @@ function gaussFit(img,findTheSpot)
 %       [] = gaussFit(inputs,findTheSpot);
 % INPUTS:
 %       inputs:         The two-dimensional array to be filtered.
-%       findTheSpot: (optional)    jklhkljhlh
+%       findTheSpot: (optional)    Characteristic lengthscale of noise in pixels.
+%                       Additive noise averaged over this length should
+%                       vanish. May assume any positive floating value.
+%                       May be set to 0 or false, in which case only the
+%                       highpass "background subtraction" operation is 
+%                       performed.
 %
 % OUTPUTS:
-%               []]:    answer.
+%               res:    filtered image.
 % PROCEDURE:
 %       1. Data ROI selection of local area 
 %       2. Non-linear least squares minimization for 7-parameter Gaussian 
@@ -86,6 +91,7 @@ if thereAreNoInputs
     
 else
     % the data is an input
+    img=inputs;
     
     % default behavior: assume the gaussian shape in the 2d image data is
     % centered and has a width between 1 and 5 pixels.
@@ -96,38 +102,27 @@ end
 
 %% declaring fitting predicates
 
+% width in pixels of the 'local area' to be selected from the data
 if thereAreNoInputs
-
-    % width in pixels of the 'local area' to be selected from the data
-    nPixels=[];
-
     if round(
     
     
     end
     
 else
-    nPixels=size(img);
+    nPixels=11;
 end
 
 [x,y]=ndgrid(linspace(-.5,.5,nPixels),linspace(-.5,.5,nPixels));
 X=cat(2,x(:),y(:));
 
-% explain angle fixing
-
-
 xR=@(x,y,xc,yc,th)(x-xc)*cos(th)-(y-yc)*sin(th);
-% yR=@(x,y,xc,yc,th)(x-xc)*sin(th)+(y-yc)*cos(th);
-
-th=pi/2;
-xR=@(x,y,xc,yc)(x-xc)*cos(th)-(y-yc)*sin(th);
-yR=@(x,y,xc,yc)(x-xc)*sin(th)+(y-yc)*cos(th);
-
+yR=@(x,y,xc,yc,th)(x-xc)*sin(th)+(y-yc)*cos(th);
 
 % rotating bivariate gaussian function for least squares minimization
 % parameters: [xCenter, yCenter, angle, xSD, ySD, amplitude, offset]
-f=@(p,X) exp( xR(X(:,1), X(:,2), p(1), p(2)).^2/2/p(4)^2 + ...
-    yR( X(:,1), X(:,2), p(1), p(2)).^2/2/p(5)^2 ) *p(6)+p(7);
+f=@(p,X) exp( xR(X(:,1), X(:,2), p(1), p(2), p(3) ).^2/2/p(4)^2 + ...
+    yR( X(:,1), X(:,2), p(1), p(2), p(3) ).^2/2/p(5)^2 ) *p(6)+p(7);
 
 %% data selection
 

@@ -202,16 +202,17 @@ if yesbgroundsub&&yesFitting
             
             % rename the data file names
             dnames{ii}=[dnames{ii},'_bgsub'];
-            end
+            
         else
             % rename the data file names
             dnames{ii}=[dnames{ii},'_bgsub'];
         end
-    try
-        close(h1)
+        try
+            close(h1)
+        end
     end
 end
-
+        
 %% WRITE PHASEMASKS FILE FOR ALL MOVIES
 
 % find phase contrast images
