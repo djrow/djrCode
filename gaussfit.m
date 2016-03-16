@@ -75,7 +75,7 @@ end
 %% loading data
 if thereAreNoInputs
     % user input file location
-    filterspec='*.'
+    filterspec='*.mat'
     title=
     file=
 
