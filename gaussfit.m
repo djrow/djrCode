@@ -119,16 +119,31 @@ end
 
 if thereAreNoInputs
 
-    % width in pixels of the 'local area' to be selected from the data
-    nPixels=[];
+    % user specified width in pixels of the 'local area' to be selected from the data for
+    % fitting
+    nPixels=11;
 
-    if round(
+
+
+
+
+
     
-    
-    end
     
 else
     nPixels=size(img);
+
+    if any(rem(nPixels,2))
+        whichEven=find(~rem(nPixels,2));
+
+        % B = PADARRAY(img,padsize,padVal,direction) pads A with values padVal, and in
+        % the direction specified by the string direction. By default, direction is 'both'.
+        padsize=1;
+        padVal=nan;
+        direction='post';
+
+        img=padarray(img,padsize,padVal,direction)    
+    end
 end
 
 [x,y]=ndgrid(linspace(-.5,.5,nPixels),linspace(-.5,.5,nPixels));
@@ -140,10 +155,10 @@ X=cat(2,x(:),y(:));
 xR=@(x,y,xc,yc,th)(x-xc)*cos(th)-(y-yc)*sin(th);
 yR=@(x,y,xc,yc,th)(x-xc)*sin(th)+(y-yc)*cos(th);
 
-th=pi/2;
-xR=@(x,y,xc,yc)(x-xc)*cos(th)-(y-yc)*sin(th);
-yR=@(x,y,xc,yc)(x-xc)*sin(th)+(y-yc)*cos(th);
-
+% if you wish to fix the angle use this portion of commented code:
+% th=userSpecifiedValue;
+% xR=@(x,y,xc,yc)(x-xc)*cos(th)-(y-yc)*sin(th);
+% yR=@(x,y,xc,yc)(x-xc)*sin(th)+(y-yc)*cos(th);
 
 % rotating bivariate gaussian function for least squares minimization
 % parameters: [xCenter, yCenter, angle, xSD, ySD, amplitude, offset]
@@ -160,7 +175,6 @@ end
 if whichN(2)
     img=padarray;
 end
-
 
 if findTheSpot
     % select the local area around a bright spot in a larger image
@@ -203,7 +217,6 @@ pStart(5)=2;
 mVals=[max(truImg(:)),min(truImg(:))];
 pStart(6)=mVals(1)-mVals(2);
 pStart(7)=mVals(2);
-
 
 %% fitting the data
 
