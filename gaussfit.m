@@ -75,9 +75,23 @@ end
 %% loading data
 if thereAreNoInputs
     % user input file location
-    filterspec='*.mat'
-    title=
-    file=
+
+    % The filterspec parameter determines the initial display of files in the dialog box.
+    filterspec='*.mat';
+
+    % the title parameter is a string containing the title of the dialog box.
+    title='Choose the data. You can shift-click to select multiple files.';
+
+    % the file parameter is a string containing the name to use as the default selection.
+    file='';
+
+    % filename is a cell array of strings if multiple filenames are selected. Otherwise, 
+    % it is a string representing the selected filename.
+
+    % pathname is is a string containing the path of the file selected in the dialog box.
+    % If the user presses Cancel, it is set to 0.
+
+    % filterindex is 
 
     [filename, pathname, filterindex] = uigetfile(filterspec, title, file, 'multiselect','on')
         
