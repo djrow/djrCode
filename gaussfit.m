@@ -34,7 +34,10 @@ if ~nargin
     % user input file location
 
     % The filterspec parameter determines the initial display of files in the dialog box.
-    filterspec='*.mat';
+    filterspec{:,1}={'*.mat'; '*.tif*'; '*.avi'};
+    filterspec{:,2}={'Matlab data files (*.mat)'; ...
+                        'tiff images or tiff image stacks (*.tif or *.tiff)'; ...
+                        'avi movie files (*.avi)'}
 
     % the title parameter is a string containing the title of the dialog box.
     title='Choose the data. You can shift-click to select multiple files.';
@@ -44,11 +47,10 @@ if ~nargin
 
     % filename is a cell array of strings if multiple filenames are selected. Otherwise, 
     % it is a string representing the selected filename.
-
     % pathname is is a string containing the path of the file selected in the dialog box.
     % If the user presses Cancel, it is set to 0.
-
-    % filterindex is 
+    % filterindex is the index of the filter selected in the dialog box. The indexing starts
+    % at 1. If the user presses Cancel, it is set to 0.
 
     [filename, pathname, filterindex] = uigetfile(filterspec, title, file, 'multiselect','on')
     imLoc={filename}
@@ -73,7 +75,7 @@ elseif nargin>0
         findTheSpot=0;
     end
 
-    
+
 end
 
 %% declaring fitting predicates
