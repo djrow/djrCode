@@ -1,4 +1,4 @@
-function [mdl,fitPars,fitCI]=gaussFit(img,findTheSpot)
+function [mdl,fitPars,fitCI,f]=gaussFit(img,findTheSpot)
 %
 % NAME:
 %       gaussFit
@@ -33,10 +33,7 @@ function [mdl,fitPars,fitCI]=gaussFit(img,findTheSpot)
 %       distributed freely in its original form when properly attributed.
 
 %% parsing inputs
-if ~nargin
-    % there are no inputs
-    thereAreNoInputs=1;
-    
+if ~nargin    
     % user input file location
     
     % The filterspec parameter determines the initial display of files in
@@ -81,9 +78,6 @@ if ~nargin
     findTheSpot=0;
     
 elseif nargin>0
-    % there are inputs
-    thereAreNoInputs=0;
-    
     if ~exist('findTheParticle','var')
         findTheSpot=0;
     end
@@ -114,8 +108,8 @@ f=@(p,X) exp( -xR(X(:,1), X(:,2), p(1), p(2), p(3)).^2/2/p(4)^2 + ...
 
 %% data selection
 
-% pad the img(s) with nans (to be removed later). B =
-% padarray(img,padsize,padVal,direction) pads img with values padVal, and
+% pad the img(s) with nans (to be removed later). 
+% B = padarray(img,padsize,padVal,direction) pads img with values padVal, and
 % in the direction specified by the string direction. By default, direction
 % is 'both'.
 padsize=[nPixels,nPixels];
@@ -205,6 +199,6 @@ fitCI=diff(coefCI(mdl),1,2);
 fitPars=mdl.Coefficients{:,1};
 
 % shift and scale results back to laboratory frame.
-fitPars([1,2])=fitPars([1,2]).*size(truImg)+locs;
-fitPars([4,5])=fitPars([4,5]).*size(truImg);
+fitPars([1,2])=fitPars([1,2]).*size(truImg)'+locs';
+fitPars([4,5])=fitPars([4,5]).*size(truImg)';
 end
