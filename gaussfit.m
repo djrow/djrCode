@@ -52,17 +52,18 @@ if ~nargin
     %       user presses Cancel, it is set to 0.
     % filterindex is the index of the filter selected in the dialog box. The indexing starts at 1. 
     %       If the user presses Cancel, it is set to 0.
-    [filename, pathname, filterindex] = uigetfile(filterspec, title, file, 'multiselect','on')
+    % multiselect has been turned off because that capability has not yet been built into the code.
+    [filename, pathname, filterindex] = uigetfile(filterspec, title, file, 'multiselect','off')
     imLoc={filename}
     for ii=1:numel(filename)
         img{ii}=imread(imLoc{ii});      % load data
     end
 
-    if numel(img)==1
+    % if numel(img)==1
         manyImages=0;
-    else
-        manyImages=1;
-    end
+    % else
+        % manyImages=1;
+    % end
 
     % default behavior: assume the spot is near the center of img
     findTheSpot=0;
@@ -84,7 +85,7 @@ nPixels=11;
 [x,y]=ndgrid(linspace(-.5,.5,nPixels),linspace(-.5,.5,nPixels));
 X=cat(2,x(:),y(:));
 
-% rotate the coordinates
+% coordinate rotation functions
 xR=@(x,y,xc,yc,th)(x-xc)*cos(th)-(y-yc)*sin(th);
 yR=@(x,y,xc,yc,th)(x-xc)*sin(th)+(y-yc)*cos(th);
 
@@ -96,7 +97,7 @@ yR=@(x,y,xc,yc,th)(x-xc)*sin(th)+(y-yc)*cos(th);
 % f=@(p,X) exp( xR(X(:,1), X(:,2), p(1), p(2)).^2/2/p(3)^2 + ...
 %       yR( X(:,1), X(:,2), p(1), p(2)).^2/2/p(4)^2 ) *p(5) + p(6);
 
-% rotating bivariate gaussian function for least squares minimization
+% freely rotating bivariate gaussian function for least squares minimization
 % parameters: [xCenter, yCenter, angle, xSD, ySD, amplitude, offset]
 f=@(p,X) exp( xR(X(:,1), X(:,2), p(1), p(2), p(3)).^2/2/p(4)^2 + ...
     yR( X(:,1), X(:,2), p(1), p(2), p(3)).^2/2/p(5)^2 ) *p(6) + p(7);
@@ -112,6 +113,7 @@ direction='both';
 oImSize=size(img);
 img=padarray(img,padsize,padVal,direction)  
 
+% make sure the img has an odd number of pixels on its side.
 if rem(size(img,1),2)>0
     img=cat(1, img, nans(1,size(img,2))); 
 end
@@ -126,26 +128,28 @@ if findTheSpot
     % bandpass and threshold
     LP=1;           % low pass value
     HP=10;          % high pass value
-    T=[];
+    intThresh=100;
     hMax=[1e2];     % larger if the dynamic range of your data is larger
     lzero=5;        % this squelches a 5 pixel boundary around the filtered image
 
-    bIm=bpassDJR(img, LP, HP, T, lzero);
+    bIm=bpassDJR(img, LP, HP, intThresh, lzero);
     
     % watershed algorithm
-    extImg=imextendedmax(bimg,hMax);
+    extImg=imextendedmax(bIm,hMax);
     
     % shrink to a point. this is the estimated location of the spot
-    sIm=bwmorph(extimg,'shrink',inf);
+    sIm=bwmorph(extImg,'shrink',inf);
     
     % the index of the one pixel is a good guess for the particle location
-    [locs(:,1),locs(:,2)]=find(bp_img);
+    [locs(:,1),locs(:,2)]=find(sIm);
 
+    % temporally coincdident guesses are not treated with this code.
     if size(locs(1))>1
         display('fix this')
         return
     end
 
+    % find selection domains
     [temp1,temp2]=ndgrid(locs(1)-(nPixels-1)/2:locs(1)+(nPixels-1)/2, ...
         locs(2)-(nPixels-1)/2:locs(2)+(nPixels-1)/2);
     
@@ -154,7 +158,6 @@ if findTheSpot
     
 else
     % otherwise, the original data is used
-
     truImg=img;
 end
 
@@ -188,8 +191,5 @@ fitCI=diff(coefCI(mdl),1,2);
 fitPars=mdl.Coefficients{:,1};
 
 % shift results back to laboratory frame.
-
-[...]
-
-
+fitPars(1,2)=fitPars+locs;
 end
