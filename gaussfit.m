@@ -16,7 +16,6 @@ function [mdl,fitPars,fitCI]=gaussFit(img,findTheSpot)
 %       mdl:            fitting result "object"
 %       fitPars:        fitting coefficient vector
 %       fitCI:          95% confidence interval of fitting coefficients at end of fitting
-%               
 % PROCEDURE:
 %       1. Peak guessing and/or data ROI selection of local area inside img
 %       2. Non-linear least squares minimization for 7 (or 6) - parameter Gaussian 
@@ -53,7 +52,6 @@ if ~nargin
     %       user presses Cancel, it is set to 0.
     % filterindex is the index of the filter selected in the dialog box. The indexing starts at 1. 
     %       If the user presses Cancel, it is set to 0.
-
     [filename, pathname, filterindex] = uigetfile(filterspec, title, file, 'multiselect','on')
     imLoc={filename}
     for ii=1:numel(filename)
@@ -156,6 +154,7 @@ if findTheSpot
     
 else
     % otherwise, the original data is used
+
     truImg=img;
 end
 
