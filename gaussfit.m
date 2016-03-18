@@ -97,7 +97,7 @@ end
 %% declaring fitting predicates
 
 % user specified width in pixels of the 'local area' to be selected from
-% the data for fitting
+% the data for fitting. should be odd. just keep it odd. i'm superstitious.
 nPixels=11;
 
 % coordinate rotation functions
@@ -129,15 +129,6 @@ direction='both';
 oImSize=size(img);
 img=padarray(img,padsize,padVal,direction);
 
-% make sure the img has an odd number of pixels on its side.
-if rem(size(img,1),2)==0
-    img=cat(1, img, nan(1,size(img,2)));
-end
-if rem(size(img,2),2)==0
-    img=cat(2, img, nan(1,size(img,1))');
-end
-nImSize=size(img);
-
 if findTheSpot
     % select the local area around a bright spot in a larger image
     
@@ -157,26 +148,25 @@ if findTheSpot
     sIm=bwmorph(extImg,'shrink',inf);
     
     % the index of the one pixel is a good guess for the particle location
-    [locs(:,1),locs(:,2)]=find(sIm);
+    [locInds(:,1),locInds(:,2)]=find(sIm);
     
     % temporally coincdident guesses are not treated with this code.
-    if size(locs(1))>1
-        display('fix this')
+    if size(locs(:,1))>1
+        display('[...fix this...] data quality too poor for this algorithm.')
         return
     end
     
-    % find selection domains
-    [sDom1,sDom2]=ndgrid(locs(1)-(nPixels-1)/2:locs(1)+(nPixels-1)/2, ...
-        locs(2)-(nPixels-1)/2:locs(2)+(nPixels-1)/2);
-    
-    % select the data
-    truImg=reshape(img(sDom1(:),sDom2(:)),[nPixels,nPixels]);
-    
 else
-    % otherwise, the original data is used
-    truImg=img;
-    locs=[0,0];
+    % otherwise, the 
+    locs=round(size(img)/2);
 end
+
+% find selection domains
+[sDom1,sDom2]=ndgrid(locs(1)-(nPixels-1)/2:locs(1)+(nPixels-1)/2, ...
+    locs(2)-(nPixels-1)/2:locs(2)+(nPixels-1)/2);
+
+% select the data
+truImg=reshape(img(sDom1(:),sDom2(:)),[nPixels,nPixels]);
 
 %% starting parameter selection
 
@@ -200,18 +190,19 @@ pStart(7)=mVals(2);
 
 [x,y]=ndgrid(linspace(-.5,.5,size(truImg,1)),linspace(-.5,.5,size(truImg,1)));
 X=cat(2,x(:),y(:));
-mdl=fitnlm(X(~isnan(truImg),:),truImg(~isnan(truImg)),f,pStart);
+% mdl=fitnlm(X(~isnan(truImg),:),truImg(~isnan(truImg)),f,pStart);
+x=lsqnonlin(@(p)nansum((img-f(p,X)).^2),pStart,lb,ub)
 
 %% organizing outputs
 % confidence interval
-fitCI=diff(coefCI(mdl),1,2);
+% fitCI=diff(coefCI(mdl),1,2);
 
 % fitting coefficients
-fitPars=mdl.Coefficients{:,1};
+% fitPars=mdl.Coefficients{:,1};
 
 % shift and scale results back to laboratory frame.
-fitPars([1,2])=fitPars([1,2]).*size(truImg)'+locs';
-fitPars([4,5])=fitPars([4,5]).*size(truImg)';
+fitPars([1,2])=fitPars([1,2]).*nPixels+locs';
+fitPars([4,5])=fitPars([4,5]).*nPixels;
 
 
 %% plot the output
