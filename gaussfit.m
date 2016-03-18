@@ -190,15 +190,11 @@ pStart(7)=mVals(2);
 
 [x,y]=ndgrid(linspace(-.5,.5,size(truImg,1)),linspace(-.5,.5,size(truImg,1)));
 X=cat(2,x(:),y(:));
-% mdl=fitnlm(X(~isnan(truImg),:),truImg(~isnan(truImg)),f,pStart);
-x=lsqnonlin(@(p)nansum((img-f(p,X)).^2),pStart,lb,ub)
+x=lsqcurvefit(f,pStart,X(~isnan(truImg)),truImg(~isnan(truImg)),lb,ub)
 
 %% organizing outputs
-% confidence interval
-% fitCI=diff(coefCI(mdl),1,2);
-
-% fitting coefficients
-% fitPars=mdl.Coefficients{:,1};
+% confidence intervals
+fitCI=
 
 % shift and scale results back to laboratory frame.
 fitPars([1,2])=fitPars([1,2]).*nPixels+locs';
