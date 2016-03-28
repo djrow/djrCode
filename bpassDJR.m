@@ -1,7 +1,7 @@
 function res = bpassDJR(image_array,lnoise,lobject,threshold,lzero)
 % 
 % NAME:
-%               bpass
+%               bpassDJR
 % PURPOSE:
 %               Implements a real-space bandpass filter that suppresses 
 %               pixel noise and long-wavelength image variations while 
