@@ -1,4 +1,4 @@
-function [v, simProps] = dataGen(boundaryCondition, blurFlag)
+function [v, simProps] = dataGen(varargin)
 %
 % NAME:
 %       dataGen
@@ -32,13 +32,15 @@ function [v, simProps] = dataGen(boundaryCondition, blurFlag)
 
 
 %% simulation parameters
-D = .1;      			% diffusion coefficient in microns^2/s
+D = .01;                % diffusion coefficient in microns^2/s
 tFrame = .05;			% frame integration time in seconds
 pixSize = .049;			% width of pixels in microns
 psfSize = .098;			% s.d. of the psf in microns
 celSize = [1,3];        % [width, length] of confinement cylinder in microns
 nFrames = 1e3;			% number of frames in the simulated movie
 SNR = 20;				% signal to noise ratio for added white noise (0:inf)
+confBool = 1;           % 'confined' or 'unconfined'
+blurFlag = 1;           % include blur subframes or not
 
 % algorithmically-determined image size designed to disallow edge effects
 imSize = ceil(celSize/pixSize+4*ceil(psfSize/pixSize));
@@ -56,6 +58,30 @@ nSubs = ceil(D*tFrame/dtRef);
 
 % update the value of the diffusion coefficient since rounding may change it.
 D = nSubs*dtRef/tFrame;
+
+% simulation properties structure
+simProps.D = D;
+simProps.IntegrationTime = tFrame;
+simProps.SNR = SNR;
+simProps.PixelWidth = pixSize;
+simProps.ConfinementBool = confBool;
+simProps.BlurBool = blurFlag;
+simProps.NumSubframes = nSubs;
+simProps.dtRef = dtRef;
+
+% if any sim parameters are included as inputs
+if ~rem(nargin,2)
+    fNames=fieldnames(simProps);
+    for ii=1:2:nargin
+        whichField = strcmp(fNames,varargin{ii});
+        eval([fNames{whichField} ' = varargin{ii+1}'])
+    end
+    
+elseif ~rem(nargin,1)
+    warning('use paired inputs')
+    v=[];
+    return    
+end
 
 %% Trajectory generation
 if strcmp(boundaryCondition, 'confined')
@@ -151,14 +177,4 @@ end
 % of a fluorescent spot to the standard deviation of the background noise.
 % note: max(v(:)) is 1
 v = v + 1/SNR*randn(size(v));
-
-% simulation properties structure
-simProps.DiffusionCoefficient = D;
-simProps.IntegrationTime = tFrame;
-simProps.SNR = SNR;
-simProps.PixelWidth = pixSize;
-simProps.ConfinementFlag = strcmp(boundaryCondition, 'confined');
-simProps.BlurFlag = blurFlag;
-simProps.NumSubframes = nSubs;
-simProps.dtRef = dtRef;
 end
