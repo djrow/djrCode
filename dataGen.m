@@ -10,8 +10,39 @@ function [v, simProps] = dataGen(varargin)
 % CALLING SEQUENCE:
 %       [v, simProps] = dataGen(boundaryCondition, blurFlag);
 % INPUTS:
-%       boundaryCondition:  'confined' or 'unconfined'
-% 		blurFlag:			1 or 0, include or exclude blur
+%       varargin:  use paired inputs to set the property (input 1) to the
+%           value (input 2) desired.
+%
+%       Properties:             Description:
+%
+%       D                       diffusion coefficient in microns^2/s
+%
+%       tFrame                  image frame integration time in seconds
+%
+%       pixSize                 Pixel size in micrometers
+%
+%       psfSize                 standard deviation (width) of the microscope's
+%                               point spread function in micrometers. i.e.
+%                               FWHM = sqrt(2*log(2)) * psfSize
+%
+%       celSize                 1x2 vector: [width (diameter), height
+%                               (length)] of the bounding box (cylinder)
+%                               depending on the confinement condition
+%
+%       nFrames                 number of frames to be simulated
+%
+%       SNR                     signal to noise ratio (ratio of maximum
+%                               signal amplitude to standard deviation of
+%                               background noise)
+%
+%       confBool                1 for confined to the interior of a
+%                               cylinder, and 0 for free diffusion.
+%       
+%       blurFlag                1 for blurry motion, 0 for 'stroboscopic
+%                               illumination'
+%
+%
+%
 % OUTPUTS:
 %       v:            		simulated image time sequence
 %       simProps:        	properties of the simulation in the Matlab structure format
@@ -31,7 +62,7 @@ function [v, simProps] = dataGen(varargin)
 %       v=dataGen('confined', 1)
 
 
-%% simulation parameters
+%% Default simulation parameters
 D = .01;                % diffusion coefficient in microns^2/s
 tFrame = .05;			% frame integration time in seconds
 pixSize = .049;			% width of pixels in microns
@@ -53,42 +84,51 @@ end
 % minimum increment of speed in units of microns^2/subframe
 dtRef = 0.0001;
 
+% initialize simulation properties structure
+simProps.D = D;
+simProps.tFrame = tFrame;
+simProps.pixSize = pixSize;
+simProps.psfSize = psfSize;
+simProps.celSize = celSize;
+simProps.nFrames = nFrames;
+simProps.SNR = SNR;
+simProps.blurFlag = blurFlag;
+simProps.nSubs = [];
+simProps.dtRef = dtRef;
+simProps.confBool = confBool;
+
+% if any sim parameters are included as inputs, change the simulation
+% parameters mentioned
+if ~rem(nargin,2)
+    fNames=fieldnames(simProps);
+    for ii=1:2:nargin
+        whichField = strcmp(fNames,varargin{ii});
+        
+        if all(~whichField)
+            warning('Check spelling. Parameter change may have not occurred')
+        end
+        
+        eval([fNames{whichField} ' = varargin{ii+1}'])
+        eval(['simProps.' fNames{whichField} ' = ' fNames{whichField},';'])
+    end
+    
+elseif ~rem(nargin,1)
+    warning('use paired inputs')
+    v=[];
+    return
+end
+
 % number of subframes required
 nSubs = ceil(D*tFrame/dtRef);
 
 % update the value of the diffusion coefficient since rounding may change it.
 D = nSubs*dtRef/tFrame;
 
-% simulation properties structure
-simProps.D = D;
-simProps.IntegrationTime = tFrame;
-simProps.SNR = SNR;
-simProps.PixelWidth = pixSize;
-simProps.ConfinementBool = confBool;
-simProps.BlurBool = blurFlag;
-simProps.NumSubframes = nSubs;
-simProps.dtRef = dtRef;
-
-% if any sim parameters are included as inputs
-if ~rem(nargin,2)
-    fNames=fieldnames(simProps);
-    for ii=1:2:nargin
-        whichField = strcmp(fNames,varargin{ii});
-        eval([fNames{whichField} ' = varargin{ii+1}'])
-    end
-    
-elseif ~rem(nargin,1)
-    warning('use paired inputs')
-    v=[];
-    return    
-end
-
 %% Trajectory generation
-if strcmp(boundaryCondition, 'confined')
-    
+if confBool
     % confined particle trajectory
     mLocs = zeros(3, nFrames);
-    for ii = 1 : nFrames*nSubs-1
+    for ii = 1 : nFrames*nSubs-1    % this loop can be compiled to mex64 to increase its speed
         % three 1d steps pulled from normal distribution with variance 2*dtRef
         step = sqrt(2*dtRef) * randn(3,1);
         
@@ -111,7 +151,7 @@ if strcmp(boundaryCondition, 'confined')
             % there are two solutions. the one closest to the candidate position is chosen. the farther
             % one is on the other side of the cell.
             whichone = (xi-candPos(1)).^2 + (yi-candPos(3)).^2 + (xi-prevPos(1)).^2 + (yi-prevPos(3)).^2;
-            xip = [xi(find(whichone == min(whichone))),yi(find(whichone == min(whichone)))]; %#ok<FNDSB>
+            xip = [xi(find(whichone == min(whichone))),yi(find(whichone == min(whichone)))];
             
             normv = -xip/sqrt(sum(xip.^2));
             l = sqrt(sum((candPos([1,3])'-xip).^2));
@@ -135,7 +175,7 @@ if strcmp(boundaryCondition, 'confined')
         
         mLocs(:, ii+1) = candPos;
     end
-elseif strcmp(boundaryCondition, 'unconfined')
+else
     
     % unconfined particle trajectory
     mLocs=cumsum(sqrt(2*dtRef) * randn(3,nFrames*nSubs),2);
@@ -151,7 +191,7 @@ if blurFlag
         tr_x(:, ii) = mLocs(1, 1+(ii-1)*nSubs : ii*nSubs);
         tr_y(:, ii) = mLocs(2, 1+(ii-1)*nSubs : ii*nSubs);
     end
-elseif ~blurFlag
+else
     % just use the first subframe from each frame
     tr_x = mLocs(1, 1:nSubs:end);
     tr_y = mLocs(2, 1:nSubs:end);
@@ -167,14 +207,25 @@ for ii=-2*psfSize:pixSize:celSize(1)+2*psfSize        % x pixel locations with p
     cx = cx+1;
     for jj=-2*psfSize:pixSize:celSize(2)+2*psfSize    % y pixel locations with padding
         cy = cy+1;
+        
         % symmeteric gaussian function approximation of Airy Disk
         v(cx,cy,:) = mean(exp(-((ii-tr_x).^2+(jj-tr_y).^2)/2/psfSize^2),1);
     end
     cy = 0;
 end
 
-% add white noise to achieve SNR of 6, defined as the ratio of the maximum intensity
-% of a fluorescent spot to the standard deviation of the background noise.
-% note: max(v(:)) is 1
+% add white noise
 v = v + 1/SNR*randn(size(v));
+
+simProps.D = D;
+simProps.tFrame = tFrame;
+simProps.pixSize = pixSize;
+simProps.psfSize = psfSize;
+simProps.celSize = celSize;
+simProps.nFrames = nFrames;
+simProps.SNR = SNR;
+simProps.blurFlag = blurFlag;
+simProps.nSubs = nSubs;
+simProps.dtRef = dtRef;
+simProps.confBool = confBool;
 end

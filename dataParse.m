@@ -62,7 +62,7 @@ for ii=1:nTau
     end
     
     % mean squared displacements vs time lag
-    MSDs(ii,:)=nansum((tr(indvec2,:)-tr(indvec1,:)).^2,1);
+    MSDs(ii,:)=nanmean((tr(indvec2,:)-tr(indvec1,:)).^2,1);
 end
 
 %% STICS analysis
@@ -133,7 +133,7 @@ else
     ub = [inf, inf];
 end
 
-% time lag domain vectgor
+% time lag domain vector
 tau = (1:nTau)'*tFrame;
 
 % D from tracking

@@ -84,6 +84,11 @@ if findTheSpot
     % watershed algorithm
     extImg=imextendedmax(bIm,hMax);
     
+    % failed watershed algorithm can result in all ones
+    if all(extImg(:))
+        extImg=extImg-1;
+    end
+    
     % shrink to a point. this is the estimated location of the spot
     sIm=bwmorph(extImg,'shrink',inf);
     
