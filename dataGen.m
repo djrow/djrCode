@@ -13,7 +13,7 @@ function [v, simProps] = dataGen(varargin)
 %       varargin:  use paired inputs to set the property (input 1) to the
 %           value (input 2) desired.
 %
-%       Properties:             Description:
+%       Properties:             Descriptions:
 %
 %       D                       diffusion coefficient in microns^2/s
 %
@@ -40,8 +40,6 @@ function [v, simProps] = dataGen(varargin)
 %       
 %       blurFlag                1 for blurry motion, 0 for 'stroboscopic
 %                               illumination'
-%
-%
 %
 % OUTPUTS:
 %       v:            		simulated image time sequence

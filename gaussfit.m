@@ -1,4 +1,4 @@
-function [fitPars, conf95]=gaussFit(img,findTheSpot)
+function [fitPars, conf95]=gaussFit(img, varargin) %findTheSpot, plottingFlag)
 %
 % NAME:
 %       gaussFit
@@ -12,14 +12,28 @@ function [fitPars, conf95]=gaussFit(img,findTheSpot)
 %       [fitPars, conf95] = gaussFit(img,findTheSpot);
 % INPUTS:
 %       img:            The two-dimensional array to be fit to a gaussian
-%       findTheSpot:    (optional) 1 or 0. Default behavior is to fit an
+%       
+%       varargin:       use paired inputs to set the property (input 1) to the
+%           value (input 2) desired.
+%
+%       Properties:     Descriptions:
+%       
+%       findTheSpot:    1 or 0. Default behavior is to fit an
 %           ROI in the center of the image. If the spot is not near the
 %           center or the image is very large, findTheSpot enables the code
 %           to first roughly locate the spot and then use that location as
 %           the ROI center.
+% 
+%       plottingFlag:   1 or 0. show plotting output. default is 0.
+%       
+%       widthGuess:     set the starting value for the width of the
+%                       Gaussian in units of pixels.
+%
+%       nPixels         pixel width of ROI to be selected from img. default
+%                       is 11. the value should be odd.
+%
 % OUTPUTS:
-%       mdl:            fitting result "object"
-%       fitPars:        fitting coefficient vector
+%       fitPars:        fitting coefficient vector, all units are pixels.
 %       fitCI:          95% confidence interval of fitting coefficients at
 %                       end of fitting
 % PROCEDURE:
@@ -34,18 +48,46 @@ function [fitPars, conf95]=gaussFit(img,findTheSpot)
 %
 %       For testing purposes, run this script:
 %
-%       [x,y]=ndgrid(linspace(-1,1,20),linspace(-1,1,20));
-%       imwrite(exp(-x.^2/2/2^2-y.^2/2/3^2)+.02*randn(size(x)),'gImg.tif','tif');
-%
-%       mdl=gaussFit();
-%
-%
+%       img = exp(-x.^2/2/2^2-y.^2/2/3^2)+.02*randn(size(x));
+%       p = gaussFit(img,'widthGuess',2);
+
+% if any sim parameters are included as inputs, change the simulation
+% parameters mentioned
+if nargin>1
+    fNames={'findTheSpot', 'plottingFlag', 'widthGuess', 'nPixels'};
+    for ii=1:2:nargin-1
+        whichField = strcmp(fNames,varargin{ii});
+        
+        if all(~whichField)
+            warning('Check spelling. Parameter change may have not occurred.')
+        end
+        
+        eval([fNames{whichField} ' = varargin{ii+1};'])
+    end
+    
+elseif rem(nargin,1)
+    warning('use paired inputs if using varargin.')
+    
+    % empty output. size must change if the gaussian fitting function is changed.
+    fitPars = nan(1,6);
+    conf95 = nan(1,6);
+    return
+end
 
 %% declaring fitting predicates
 
-% user specified width in pixels of the 'local area' to be selected from
-% the data for fitting. should be odd-valued.
-nPixels=11;
+if ~exist('findTheSpot','var')
+    findTheSpot = 1;
+end
+if ~exist('plottingFlag','var')
+    plottingFlag = 0;
+end
+if ~exist('widthGuess','var')
+    widthGuess = 2;
+end
+if ~exist('nPixels','var')
+    nPixels = 11;
+end
 
 % freely rotating bivariate gaussian function for least squares minimization
 % parameters: [xCenter, yCenter, angle, xSD, ySD, amplitude, offset]
@@ -129,8 +171,8 @@ pStart(1)=0;
 pStart(2)=0;
 
 % xSD, ySD in units of pixels
-pStart(3)=2;
-pStart(4)=2;
+pStart(3)=widthGuess;
+pStart(4)=widthGuess;
 
 % amplitude, offset
 mVals=[max(truImg(:)),min(truImg(:))];
@@ -140,37 +182,40 @@ pStart(6)=mVals(2);
 %% fitting the data
 
 [x,y]=ndgrid(1:nPixels,1:nPixels);
-X=cat(2,x(:),y(:)) - nPixels/2;
+X=cat(2,x(:),y(:)) - nPixels/2; 
 [fitPars, ~, residual, ~, ~, ~,jacobian] = ...
-    lsqcurvefit(f,pStart,X(~isnan(truImg(:)),:),truImg(~isnan(truImg(:))),lb,ub);
+    lsqcurvefit(f,pStart,X(~isnan(truImg(:)),:),truImg(~isnan(truImg(:))),...
+    lb,ub);
 
 % confidence intervals
 conf95 = nlparci(fitPars, residual,'jacobian',jacobian);
 
 %% plot the output
-fVals=reshape(f(fitPars,X),[nPixels,nPixels]);
-dVals=truImg;
-sVals=reshape(f(pStart,X),[nPixels,nPixels]);
-
-subplot(221)
-title('Data')
-pcolor(kron(dVals,ones(10)))
-shading flat; axis image; colorbar
-
-subplot(222)
-title('starting values')
-pcolor(kron(sVals,ones(10)))
-shading flat; axis image; colorbar
-
-subplot(223)
-title('fit result')
-pcolor(kron(fVals,ones(10)))
-shading flat; axis image; colorbar
-
-subplot(224)
-title('residuals')
-pcolor(kron(dVals - fVals,ones(10)))
-shading flat; axis image; colorbar
+if plottingFlag
+    fVals=reshape(f(fitPars,X),[nPixels,nPixels]);
+    dVals=truImg;
+    sVals=reshape(f(pStart,X),[nPixels,nPixels]);
+    
+    subplot(221)
+    title('Data')
+    pcolor(kron(dVals,ones(10)))
+    shading flat; axis image; colorbar
+    
+    subplot(222)
+    title('starting values')
+    pcolor(kron(sVals,ones(10)))
+    shading flat; axis image; colorbar
+    
+    subplot(223)
+    title('fit result')
+    pcolor(kron(fVals,ones(10)))
+    shading flat; axis image; colorbar
+    
+    subplot(224)
+    title('residuals')
+    pcolor(kron(dVals - fVals,ones(10)))
+    shading flat; axis image; colorbar
+end
 
 % shift center back to lab frame
 fitPars([1,2])=fitPars(1:2)+locInds-nPixels;

@@ -25,12 +25,16 @@ function resStruct = dataParse(data, mask)
 %
 %       For testing purposes, run this script:
 %
-%       v = dataGen('confined',1);
-%       r = dataParse(v);
+%       [v,sP]=dataGen('D',.1,'tFrame',.05,'nFrames',500);
+%       r = dataParse(v)
+%       plot(r.iMSDs); hold all
+%       plot(r.MSDs)
+%       plot(r.MSDd); hold off
+
 
 %% analysis parameters
 tFrame = 0.05;          % camera integration time in seconds
-nTau = 15;              % number of smallest time lag values to use (excluding 0)
+nTau = 5;              % number of smallest time lag values to use (excluding 0)
 pixelSize = .049;       % pixel size in microns
 nFrames = size(data,3); % number of frames in the data
 yesOverlap = 1;         % use overlapping time lags?
@@ -40,10 +44,12 @@ padStyle = 1;           % padding style for STICS analysis
 
 %% single molecule tracking analysis
 
-% spot fitting. use parfor to suppress figure generation or manually do it.
+% spot fitting.
 fitP = zeros(nFrames, 6);
 parfor ii = 1:nFrames
-    fitP(ii,:) = gaussFit(data(:,:,ii), 1);
+    % this loop may be parallelized by simply replaceing 'for' with 'parfor'
+    % and starting a parallel pool before running the code.
+    fitP(ii,:) = gaussFit(data(:,:,ii));
 end
 
 % 'tracking'. missed spots will register as nans.
@@ -106,15 +112,16 @@ end
 iMSDs=zeros(nTau,2); MSDd=iMSDs;
 [x,y]=ndgrid(1:size(STCorr,1),1:size(STCorr,2));
 for ii = 1:nTau
-    fitP = gaussFit(STCorr(:,:,ii),0);
+    fitP = gaussFit(STCorr(:,:,ii),'widthGuess',5,'nPixels',...
+        min(size(STCorr(:,:,1))),'findTheSpot',0);
     iMSDs(ii,:) = fitP(3:4).^2 * pixelSize^2;
     
     % discrete variance calculation for x dimension
-    pmf=sum(STCorr(:,:,ii),2);
+    pmf=sum(STCorr(:,:,ii)/sum(sum(STCorr(:,:,ii))),2);
     MSDd(ii,1) = sum(pmf.*(x(:,1)-mean(x(:))).^2) * pixelSize^2;
     
     % discrete variance calculation for x dimension
-    pmf=sum(STCorr(:,:,ii),1);
+    pmf=sum(STCorr(:,:,ii)/sum(sum(STCorr(:,:,ii))),1);
     MSDd(ii,2) = sum(pmf.*(y(1,:)-mean(y(:))).^2) * pixelSize^2;
 end
 
@@ -123,7 +130,7 @@ end
 % choose fitting function
 if isConfined
     f=@(p,X)sqconfMSD1D(p,X);
-    pStart = [1, .1, 0];
+    pStart = [.1, .1, 0];
     lb = [0, 0, -inf];
     ub = [inf, inf, inf];
 else
@@ -151,6 +158,10 @@ pD(:,2)=lsqcurvefit(f,pStart,tau,MSDd(:,2),lb,ub);
 resStruct.Dtracking = pT(2,:);
 resStruct.Dstics =  pS(2,:);
 resStruct.Dvar =  pD(2,:);
+resStruct.MSDs = MSDs;
+resStruct.iMSDs = iMSDs;
+resStruct.MSDd = MSDd;
+
 end
 
 function zi=sqconfMSD1D(p,X)
