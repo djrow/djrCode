@@ -204,7 +204,7 @@ switch globBool
                                             c1(x,y(1),p(7))-...
                                             c1(x,y(2),p(8))-...
                                             c1(x,y(3),1-p(7)-p(8));
-                                        pId=[1,3:9];
+                                        pId=nan;
                                         
                                     case 1 % 3 confined diffusers in 1D
                                         msdFun=@(tau,p)cat(2,...
@@ -215,7 +215,7 @@ switch globBool
                                             c1(x,y(1),p(8))-...
                                             c1(x,y(2),p(9))-...
                                             c1(x,y(3),1-p(8)-p(9));
-                                        pId=1:9;
+                                        pId=nan;
                                 end
 
                         end
@@ -229,14 +229,14 @@ switch globBool
                                         cpdFun=@(x,y,p)...
                                             c1(x,y+p(4),p(3))-...
                                             c1(x,p(4),1-p(3));
-                                        pId=[1,3,8,11];
+                                        pId=[1,3,6,8];
                                     case 1 % 1 confined diffuser with 1 immobile population in 1D
                                         msdFun=@(tau,p)...
                                             confMSD1(tau,p(1:3));
                                         cpdFun=@(x,y,p)...
                                             c1(x,y+p(5),p(4))-...
                                             c1(x,p(5),1-p(4));
-                                        pId=[1:3,8,11];
+                                        pId=[1:3,6,8];
                                 end
                             case 2 % 2 diffusers
                                 switch confBool
@@ -248,7 +248,7 @@ switch globBool
                                             c1(x,y(1)+p(7),p(5))-...
                                             c1(x,y(2)+p(7),p(6))-...
                                             c1(x,p(7),1-p(5)-p(6));
-                                        pId=[1,3:5,8,9,11];
+                                        pId=[1,3:8];
                                     case 1 % 2 confined diffusers with 1 immobile population in 1D
                                         msdFun=@(tau,p)cat(1,...
                                             confMSD1(tau,p(1:3)),...
@@ -257,7 +257,7 @@ switch globBool
                                             c1(x,y(1)+p(8),p(6))-...
                                             c1(x,y(2)+p(8),p(7))-...
                                             c1(x,p(8),1-p(6)-p(7));
-                                        pId=[1:5,8,9,11];
+                                        pId=1:8;
                                 end
                             case 3
                                 switch confBool
@@ -271,7 +271,7 @@ switch globBool
                                             c1(x,y(2)+p(10),p(8))-...
                                             c1(x,y(3)+p(10),p(9))-...
                                             c1(x,p(10),1-p(7)-p(8)-p(9));
-                                        pId=[1,3:11];
+                                        pId=nan;
                                     case 1 % 3 confined diffusers with 1 immobile population in 1D
                                         msdFun=@(tau,p)cat(1,...
                                             confMSD1(tau,p(1:3)),...
@@ -282,15 +282,19 @@ switch globBool
                                             c1(x,y(2)+p(11),p(9))-...
                                             c1(x,y(3)+p(11),p(10))-...
                                             c1(x,p(11),1-p(8)-p(9)-p(10));
-                                        pId=1:11;
+                                        pId=nan;
                                 end
 
                         end
                 end
         end
-        
-        pStart={pStart(pId)};
-        bounds=[{LB(pId)},{UB(pId)}];
+        if isnan(pId)
+            pStart = [];
+            bounds = [];
+        else
+            pStart={pStart(pId)};
+            bounds=[{LB(pId)},{UB(pId)}];
+        end
         
     case 0
         %% local fitting

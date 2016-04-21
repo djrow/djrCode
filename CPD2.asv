@@ -3,13 +3,13 @@ function x=CPD2(tracks,varargin)
 
 %% Default analysis parameters
 tFrame = .05;           % camera integration time in seconds
-maxTau = 5;             % maximum time lag in frames
+maxTau = 4;             % maximum time lag in frames
 confBool = 1;           % confined or unconfined diffusion
 overBool = 1;           % use overlapping or non-overlapping displacements?
 dim = 2;                % 1d or 2d diffusion analysis
 globBool = 1;           % global or local cpd fit
 nMobile = 1;            % number of diffusive populations
-immBool = 0;            % presence or absence of stationary population
+immBool = 1;            % presence or absence of stationary population
 plotBool = 1;           % plot output or not
 
 % initialize analysis properties structure
@@ -80,17 +80,17 @@ oRanks=cellfun(@(x)linspace(0,1,numel(x)),sqSteps,'uniformoutput',0);
     cpdFunFinder(dim,nMobile,immBool,confBool,globBool);
 
 % time lag domain
-tau = (1:maxTau)'*tFrame;
+tau = (1:maxTau)*tFrame;
 
 if globBool
     linCell=@(x)cat(2,x{:});
     fHandle=@(p,tau,sqSteps,ranks)linCell(...
         cellfun(@(x,y)x-y,...
         cellfun(@(x,y)cpdFun(x,y,p),...
-        sqSteps,num2cell(msdFun(tau,p),2),'uniformoutput',0),...
+        sqSteps,num2cell(msdFun(tau,p),1)','uniformoutput',0),...
         ranks,'uniformoutput',0));
     eHandle=@(p,tau,sqSteps)cellfun(@(x,y)cpdFun(x,y,p),...
-        sqSteps,num2cell(msdFun(tau,p),2),'uniformoutput',0);
+        sqSteps,num2cell(msdFun(tau,p),1)','uniformoutput',0);
     
     x=lsqnonlin(@(p)fHandle(p,tau,sqSteps,oRanks),...
         pStart{1},bounds{1},bounds{2});
@@ -158,11 +158,10 @@ if ~globBool&&plotBool
 elseif plotBool
     fRes = eHandle(x,tau,sqSteps);
     
-    axLims{1}(1:2) = [min(cellfun(@(x)min(x),sqSteps)),max(cellfun(@(x)max(x),sqSteps))];
-    axLims{1}(3:4) = [min(cellfun(@(x)min(x),oRanks)),max(cellfun(@(x)max(x),oRanks))];
+    axLims{1}(1:2) = [min(cellfun(min,oRanks)),max(cellfun(max,oRanks))];
+    axLims{1}(3:4) = [min(cellfun(min,sqSteps)),max(cellfun(max,sqSteps))];
     
-    axLims{2}(1:2) = [min(cellfun(@(x)min(abs(x)),resids)),...
-        max(cellfun(@(x)max(abs(x)),resids))];
+    axLims{2}(1:2) = [min(cellfun(min,sqSteps)),max(cellfun(max,sqSteps))];
     for ii = 1:maxTau
         steps = sqSteps{ii};
         ranks = oRanks{ii};
@@ -172,14 +171,13 @@ elseif plotBool
         subplot(2,maxTau,ind);
         loglog(steps,cat(1,ranks,fRes{ii}),'.')
         title(['data for tau = ' num2str(ii)])
-        axis(axLims{1})
+        axis(axLims)
         
         % residuals
         ind=sub2ind([maxTau,2],ii,2);
         subplot(2,maxTau,ind); title('residuals')
         loglog(steps,abs(resids{ii}),'.')
         title('residuals')
-        axis([axLims{1}(1:2),axLims{2}])
     end
     hold off
 end
