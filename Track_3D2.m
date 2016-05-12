@@ -48,22 +48,19 @@ function track_data=Track_3D2(fitfile1,sROI,tROI,...
 % A tracking file is created at the designated location.
 
 
-
-fitfile.data=fitfile1;
-
-fitfile.data=fitfile.data(abs(fitfile.data(:,22)-sROI)<0.01&...
-    abs(fitfile.data(:,23)-tROI)<0.1,:);
+% fitfile1=fitfile1(abs(fitfile1(:,22)-sROI)<0.01&...
+%     abs(fitfile1(:,23)-tROI)<0.1,:);
 % Retain only data from the specified sROI and tROI.
 
-% If the # of good fits is fewer than the minimum track length
-if size(fitfile.data,1)>=min_tr_length
+% If the # of good fits is larger than the minimum track length
+if size(fitfile1,1)>=min_tr_length
     enough_goodfits=1;
     
     % Total # of fits (of specified sROI and tROI) in the fit file
-    num_spots=length(fitfile.data(:,1));
+    num_spots=length(fitfile1(:,1));
     
     % The frame number of the last frame
-    max_fr=max(fitfile.data(:,1));
+    max_fr=max(fitfile1(:,1));
     
     % Create a (sparse) matrix for storing trajectories (each fit is
     % indexed into this variable according to which row it appears in the fit
@@ -82,7 +79,7 @@ if size(fitfile.data,1)>=min_tr_length
     % "ln", and when max_dark_fr = 0 there is no dark frame tolerance.
     max_dark_fr=floor(-log(min_merit)/gamma);
     
-    fr=fitfile.data(:, 1);
+    fr=fitfile1(:, 1);
     
     %Frame change identifier. For example, if the frames containing
     % fits in specified ROIs are [1 3 3 3 4 6 6 9]', the frame change
@@ -125,7 +122,7 @@ if size(fitfile.data,1)>=min_tr_length
             row_fr_change(row_fr_change_id)+delta_row_fr_change(row_fr_change_id)-1;
         
         % The current frame number
-        curr_fr_num=fitfile.data(curr_fr_spots_row(1),1);
+        curr_fr_num=fitfile1(curr_fr_spots_row(1),1);
         
         % This while loop is used to update the starting row number
         % from which the subsequent "max" is performed. For example, if
@@ -133,13 +130,13 @@ if size(fitfile.data,1)>=min_tr_length
         % ensures that the subsequent "max" command does not look through
         % rows of data corresponding to frames earlier than frame#9, and
         % thus helps to reduce computational time.
-        while curr_fr_num-fitfile.data(row_search_start)-1>max_dark_fr
+        while curr_fr_num-fitfile1(row_search_start)-1>max_dark_fr
             row_search_start=row_search_start+1;
         end
         
         % Frame #s, x-positions, y-positions, integrated intensities, cell
         % # indices and z-positions of spots from the current frame
-        curr_fr_spots_data=fitfile.data(curr_fr_spots_row,[1 9 11 14 21 19]);
+        curr_fr_spots_data=fitfile1(curr_fr_spots_row,[1 3 5 14 21 19]);
         
         % The maximum row number of each current track (i.e., the row
         % # of the most recent spot in each track or the "trajectory tail").
@@ -152,7 +149,7 @@ if size(fitfile.data,1)>=min_tr_length
         % to compete for spots from the current frame. The "tailing spot" of
         % each remaining trajectory forms this variable "valid_max_row_tr".
         if ~isempty(max_row_curr_tr)
-            valid_max_row_tr=((curr_fr_num-fitfile.data(max_row_curr_tr,1))...
+            valid_max_row_tr=((curr_fr_num-fitfile1(max_row_curr_tr,1))...
                 -1<=max_dark_fr).*max_row_curr_tr;
         else valid_max_row_tr=double.empty(0,1);
         end
@@ -170,7 +167,7 @@ if size(fitfile.data,1)>=min_tr_length
         % Frame #s, x-positions, y-positions, integrated intensities,cell
         % number indices and z-positions of all candiate spots that will compete
         % for spots from the current frame.
-        pre_and_broken_data=fitfile.data(pre_and_broken_row,[1,9,11,14,21,19]);
+        pre_and_broken_data=fitfile1(pre_and_broken_row,[1,3,5,14,21,19]);
         
         % The matrix containing values of displacement between spots from
         % the current frame and the candidates spots from the previous frames Note
@@ -183,9 +180,7 @@ if size(fitfile.data,1)>=min_tr_length
         disp_matrix=(((log(exp(pre_and_broken_data(:,2))...
             *exp(-curr_fr_spots_data(:,2)'))).^2)+...
             ((log(exp(pre_and_broken_data(:,3))...
-            *exp(-curr_fr_spots_data(:,3)'))).^2)+...
-            ((log(exp(pre_and_broken_data(:,6))...
-            *exp(-curr_fr_spots_data(:,6)'))).^2)).^0.5;
+            *exp(-curr_fr_spots_data(:,3)'))).^2)).^0.5;
         
         % Matrix of frame number (time) difference from all possible
         % combinations of spots between frames of interest. Again, "10^7"s are
@@ -316,8 +311,8 @@ if enough_goodfits==1
     track_row=track_row(track_row(:,1)~=0,:);
     
     % The number of frames (including dark frames) each track lasts.
-    fr_last=(fitfile.data(nonzeros(max(track_row,[],2)),1)...
-        -(fitfile.data(nonzeros(track_row(:,1)),1)))+1;
+    fr_last=(fitfile1(nonzeros(max(track_row,[],2)),1)...
+        -(fitfile1(nonzeros(track_row(:,1)),1)))+1;
     
     % Get rid of tracks that are too short.
     track_row=track_row(fr_last>=min_tr_length,:);
@@ -359,23 +354,23 @@ if enough_goodfits==1
             track_data(cum_tr_length(ii+1));
     end
 
-    track_data(:,2)=fitfile.data(track_row,1);                      % Frame #
+    track_data(:,2)=fitfile1(track_row,1);                      % Frame #
     track_data(:,3)=(track_data(:,2)-1).*(itgtime+timedelay)*0.001; % Time(s)
-    track_data(:,4)=fitfile.data(track_row,9);                      % x-position(px)
-    track_data(:,5)=fitfile.data(track_row,11);                     % y-position(px)
-    track_data(:,15)=fitfile.data(track_row,19);                    % z-position(px)
+    track_data(:,4)=fitfile1(track_row,3);                      % x-position(px)
+    track_data(:,5)=fitfile1(track_row,5);                     % y-position(px)
+    track_data(:,15)=fitfile1(track_row,19);                    % z-position(px)
     track_data(2:end,6)=real(sqrt(sum(track_data(2:end,[4,5,15])-...
         track_data(1:end-1,[4,5,15]),2)));                          % Displacement(px)
     track_data(cum_tr_length(1:end-1)+1,6)=nan;                     % ?
     track_data(:,7)=track_data(:,6)*pxsize;                         % Displacement(nm)
-    track_data(:,8)=fitfile.data(track_row,10);                     % x-error (px)
-    track_data(:,9)=fitfile.data(track_row,22);                     % sROI#
+    track_data(:,8)=fitfile1(track_row,10);                     % x-error (px)
+    track_data(:,9)=fitfile1(track_row,22);                     % sROI#
     track_data(:,10)=nan;                                           % Speed (TBD)
-    track_data(:,11)=fitfile.data(track_row,17);                    % y-error
-    track_data(:,12)=fitfile.data(track_row,23);                    % tROI#
-    track_data(:,13)=fitfile.data(track_row,21);                    % Cell#
-    track_data(:,14)=fitfile.data(track_row,3);                     % Amplitude
-    track_data(:,16)=fitfile.data(track_row,20);                    % z-error(px)
+    track_data(:,11)=fitfile1(track_row,17);                    % y-error
+    track_data(:,12)=fitfile1(track_row,23);                    % tROI#
+    track_data(:,13)=fitfile1(track_row,21);                    % Cell#
+    track_data(:,14)=fitfile1(track_row,3);                     % Amplitude
+    track_data(:,16)=fitfile1(track_row,20);                    % z-error(px)
     
     %% ------------------------------------------------------------------------
     %  Below: Calculate instantaneous speed

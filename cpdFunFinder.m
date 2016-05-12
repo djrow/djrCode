@@ -1,4 +1,11 @@
-function [cpdFun,msdFun,pStart,bounds]=cpdFunFinder(dim,nDiffs,immBool,confBool,globBool)
+function [cpdFun,msdFun,pStart,bounds]=cpdFunFinder(anProp)
+
+dim = anProp.dim;
+nDiffs = anProp.nMobile;
+immBool = anProp.immBool;
+confBool = anProp.confBool;
+globBool = anProp.globBool;
+
 % partial 2d cpd function
 c2=@(x,y,p)p*exp(-x./y);
 

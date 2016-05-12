@@ -1,4 +1,4 @@
-function writebin(filename,imstack)
+function writeBin(filename,imstack)
 % input is a string of the full location (with filename and extension) of
 % an nd2 file. in that location a file with the video data will be saved
 % as a bin file with the same name. memalloc is the maximum

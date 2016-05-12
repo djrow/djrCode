@@ -88,35 +88,32 @@ elseif nargin>1
     return
 end
 
-ffSwitch=3;
+
+ffSwitch=1;
 switch ffSwitch
-    case 1        
-        % freely rotating bivariate gaussian function for least squares minimization
-        % parameters: [xCenter, yCenter, angle, xSD, ySD, amplitude, offset]
-        xR=@(x,y,xc,yc,th)(x-xc)*cos(th)-(y-yc)*sin(th);
-        yR=@(x,y,xc,yc,th)(x-xc)*sin(th)+(y-yc)*cos(th);
-        f=@(p,X) exp( -xR(X(:,1), X(:,2), p(1), p(2), p(3)).^2/2/p(4)^2 + ...
-            -yR( X(:,1), X(:,2), p(1), p(2), p(3)).^2/2/p(5)^2 ) *p(6) + p(7);
-        
-    case 2        
-        % fixed angle fit
-        % parameters: [xCenter, yCenter, xSD, ySD, amplitude, offset]
-        th=0;
-        xR=@(x,y,xc,yc)(x-xc)*cos(th)-(y-yc)*sin(th);
-        yR=@(x,y,xc,yc)(x-xc)*sin(th)+(y-yc)*cos(th);
-        f=@(p,X) exp( -xR(X(:,1), X(:,2), p(1), p(2)).^2/2/p(3)^2 + ...
-            -yR( X(:,1), X(:,2), p(1), p(2)).^2/2/p(4)^2 ) *p(5) + p(6);
-        % bounds
-        lb=[-inf, -inf, 0, 0, -inf, -inf];
-        ub=[inf, inf, inf, inf, inf, inf];
-        
-    case 3
-        % symmetric gaussian
-        f=@(p,X) exp( -((X(:,1)-p(1)).^2 + (X(:,2)-p(2)).^2)/2/p(3).^2) * p(4) + p(5);
-        lb = [-params.nPixels, -params.nPixels, 0, 0, -inf];
-        ub = [params.nPixels*2, params.nPixels, inf, inf, inf];
-        
-end
+    case 
+% freely rotating bivariate gaussian function for least squares minimization
+% parameters: [xCenter, yCenter, angle, xSD, ySD, amplitude, offset]
+% xR=@(x,y,xc,yc,th)(x-xc)*cos(th)-(y-yc)*sin(th);
+% yR=@(x,y,xc,yc,th)(x-xc)*sin(th)+(y-yc)*cos(th);
+% f=@(p,X) exp( -xR(X(:,1), X(:,2), p(1), p(2), p(3)).^2/2/p(4)^2 + ...
+%     -yR( X(:,1), X(:,2), p(1), p(2), p(3)).^2/2/p(5)^2 ) *p(6) + p(7);
+
+% fixed angle fit
+% parameters: [xCenter, yCenter, xSD, ySD, amplitude, offset]
+% th=0;
+% xR=@(x,y,xc,yc)(x-xc)*cos(th)-(y-yc)*sin(th);
+% yR=@(x,y,xc,yc)(x-xc)*sin(th)+(y-yc)*cos(th);
+% f=@(p,X) exp( -xR(X(:,1), X(:,2), p(1), p(2)).^2/2/p(3)^2 + ...
+%     -yR( X(:,1), X(:,2), p(1), p(2)).^2/2/p(4)^2 ) *p(5) + p(6);
+% bounds
+% lb=[-inf, -inf, 0, 0, -inf, -inf];
+% ub=[inf, inf, inf, inf, inf, inf];
+
+% symmetric gaussian
+f=@(p,X) exp( -((X(:,1)-p(1)).^2 + (X(:,2)-p(2)).^2)/2/p(3).^2) * p(4) + p(5);
+lb = [-params.nPixels, -params.nPixels, 0, 0, -inf];
+ub = [params.nPixels*2, params.nPixels, inf, inf, inf];
 
 %% rough localization of molecules
 if params.searchBool

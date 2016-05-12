@@ -1,4 +1,4 @@
-function PhaseMask=valley(f,params,checkvals)
+function PhaseMask=valley2(f,params)
 % clear all, close all;clc
 % Update History:
 
@@ -9,33 +9,34 @@ function PhaseMask=valley(f,params,checkvals)
 % labelling has been changed from 8(default) to 4 in the autofill section.
 
 % 6/172013 YL: Updated Comments.
+
+% 5/3/2016 DR: parameters are now fields of a structure
+
 %% ------------------------------------------------------------------------
 %  User-Defined Parameters:
 %  ------------------------------------------------------------------------
-% if checkvals==1
-%     c=onCleanup(@()close);
-% end
-dilate_factor=params(1); % 0;
+
+dilate_factor=params.nDilation; % 0;
 % Change the to zero only if you still have under-segmentation regardless
 % of threshold.
 
-lower_thresh=params(2);% 0;
+lower_thresh=params.lowThresh;% 0;
 % Can be negative, but usually use [-1 0.5].
 
-higher_thresh=params(3);% .001;
+higher_thresh=params.highThresh;% .001;
 % Usually use positive values [0 3] , should be larger than
 % lower_threshold. *Decrease* this value first when cells are
 % UNDER-segmented (e.g., 2 or more cells grouped as 1 region).
 
-autofill=params(4);% 1;
+autofill=params.autofill;% 1;
 
 % Note: If cells are under-segmented, increase the lower_thresh and/or
 % decrease the higher_thresh (recommended); If cells are over-segmented,
 % decrease the lower_thresh and increase the higher_thresh.
-min_area=params(5);% 500;
+min_area=params.minArea;% 500;
 % minimum allowable area (in px) for a single segmented region. Regions
 % with area smaller than this will be discarded.
-max_area=params(6); % 10000;
+max_area=params.maxArea; % 10000;
 % maximum allowable area (in px) for a single segmented region. Regions
 % with area larger than this will be discarded.
 %%
