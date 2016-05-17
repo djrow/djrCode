@@ -74,7 +74,7 @@ fNames=fieldnames(params);
 % parameters mentioned
 if nargin>1
     for ii=1:2:nargin-2
-        whichField = strcmp(fNames,varargin{ii+1});
+        whichField = strcmp(fNames,varargin{ii});
         
         if all(~whichField)
             warning('Check spelling. Parameter change may have not occurred.')
