@@ -32,15 +32,15 @@ anProp.nMobile = 1;     % number of diffusive populations
 anProp.immBool = 0;     % presence or absence of stationary population
 anProp.tFrame = .04;    % camera integration time in seconds
 anProp.pixSize = .049;  % pixel size in microns
-anProp.maxTau = 10;      % maximum time lag in frames
+anProp.maxTau = 5;      % maximum time lag in frames
 anProp.confBool = 0;    % confined or unconfined diffusion
-anProp.globBool = 1;    % global or local cpd fit
+anProp.globBool = 0;    % global or local cpd fit
 anProp.overBool = 0;    % use overlapping or non-overlapping displacements?
 anProp.plotBool = 0;    % plot output or not
 anProp.dim = 2;         % 1d or 2d diffusion analysis
 anProp.whichDim = 1;    % for 1d diffusion, which dimension to consider
 anProp.rotAngle = pi/3; % for 1d diffusion, clockwise angle to rotate the trajectory
-anProp.bootNum = 100;     % number of bootstrap iterations
+anProp.bootNum = 1;     % number of bootstrap iterations
 fNames=fieldnames(anProp);
 
 % if any analysis parameters are included as inputs, change the analysis
@@ -132,7 +132,13 @@ nSteps = cellfun(@numel,sqSteps,'uniformoutput',0);
 tau = (1:anProp.maxTau)'*anProp.tFrame;
 
 dOut = zeros(1,anProp.bootNum);
+h=waitbar(0,'boot reps');
+c=onCleanup(@()close(h));
 for kk = 1:anProp.bootNum
+    waitbar(kk/anProp.bootNum)
+    y=cellfun(@(x,y)sort(x(randsample(y,y,1))*anProp.pixSize.^2),sqSteps,nSteps,'uniformoutput',0);
+    %         y=cellfun(@(x)x*anProp.pixSize.^2,sqSteps,'uniformoutput',0);
+    
     if anProp.globBool % GLOBAL FITTING
         linCell=@(x)cat(1,x{:});
         fHandle=@(p,tau,sqSteps,ranks)linCell(...
@@ -143,10 +149,6 @@ for kk = 1:anProp.bootNum
         eHandle=@(p,tau,sqSteps)cellfun(@(x,y)cpdFun(x,y,p),...
             sqSteps,num2cell(msdFun(tau,p),2),'uniformoutput',0);
         
-        y=cellfun(@(x,y,n)x(randsample(n,n,1))*y,sqSteps,...
-            num2cell(anProp.pixSize.^2*ones(anProp.maxTau,1)),...
-            nSteps,'uniformoutput',0);
-        
         x=lsqnonlin(@(p)fHandle(p,tau,y,oRanks),...
             pStart{1},bounds{1},bounds{2},opts);
         resids = cellfun(@(x,y)x-y,oRanks,eHandle(x,tau,sqSteps),'uniformoutput',0);
@@ -154,6 +156,7 @@ for kk = 1:anProp.bootNum
         dOut(kk)=x(1);
         
     elseif ~anProp.globBool % LOCAL FITTING
+        
         % fit the cpd curves to get the msd values
         for ii=1:anProp.maxTau
             cpdLB = bounds{1};
@@ -162,11 +165,11 @@ for kk = 1:anProp.bootNum
             
             anProp.nMobile = sum(isnan(cpdStart));
             for jj = 1:anProp.nMobile
-                cpdStart(jj) = mean(sqSteps{ii}*anProp.pixSize.^2)/(10^(jj-1));
+                cpdStart(jj) = mean(y{ii})/(10^(jj-1));
             end
             msds(:,ii)=lsqcurvefit(@(p,x)cpdFun(x,p),...
-                cpdStart,sqSteps{ii}*anProp.pixSize.^2,oRanks{ii},cpdLB,cpdUB,opts);
-            resids{1,ii} = cpdFun(sqSteps{ii}*anProp.pixSize.^2,msds(:,ii)) - oRanks{ii};
+                cpdStart,y{ii},oRanks{ii},cpdLB,cpdUB,opts);
+            resids{1,ii} = cpdFun(y{ii},msds(:,ii)) - oRanks{ii};
         end
         
         % fit msds to get diffusion coefficient
@@ -180,9 +183,12 @@ for kk = 1:anProp.bootNum
             x(ii,:)=lsqcurvefit(@(p,x)msdFun(x,p),msdStart,tau,y,...
                 msdLB,msdUB,opts);
             resids{2,ii} = msdFun(tau,x(ii,:)) - y;
+            
+            dOut(kk)=x(1);
         end
     end
 end
+
 %% plot results
 if ~anProp.globBool&&anProp.plotBool
     a=figure;

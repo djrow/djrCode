@@ -1,8 +1,6 @@
 function [frames,nframes,wsize,threshval]=binGetFrames2(vidloc,framenumbers)
 % pull out frames from a binary movie file created with loadnd2.m
-% framenumbers can be any vector of integers, and rect is [xmin,ymin,xmax,ymax].
-% either or both can be omitted to include all frames or all of every frame,...
-% respectively. omit by use of '[]'
+% framenumbers can be any vector of integers,
 
 fid=fopen(vidloc,'r');                 % open the file for reading
 if fid==-1;

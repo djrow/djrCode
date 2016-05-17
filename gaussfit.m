@@ -1,4 +1,4 @@
-function [fitPars, conf95, g]=gaussFit(img, varargin) %findTheSpot, plottingFlag)
+function [fitPars, conf95, g, outPut]=gaussFit(img, varargin)
 %
 % NAME:
 %       gaussFit
@@ -65,11 +65,14 @@ params.showGuessing = 0;
 params.widthGuess = 2;
 params.nPixels = 11;        % should be odd valued
 params.frameNumber = 1;
+params.ffSwitch = 3;        % 3 is a symmetric gaussian (5 parameters) fit
+                            % 2 is a fixed angle asymmetric gaussian fit
+                            % 1 is a 7 parameter asymmetric gaussian fit
+fNames=fieldnames(params);
 
 % if any sim parameters are included as inputs, change the simulation
 % parameters mentioned
 if nargin>1
-    fNames=fieldnames(params);
     for ii=1:2:nargin-2
         whichField = strcmp(fNames,varargin{ii+1});
         
@@ -79,18 +82,10 @@ if nargin>1
         
         eval(['params.' fNames{whichField} ' = varargin{ii+2};'])
     end
-    
-elseif nargin>1
-    warning('use paired inputs if using varargin.')
-    
-    fitPars = [];
-    conf95 = [];
-    return
 end
 
-ffSwitch=3;
-switch ffSwitch
-    case 1        
+switch params.ffSwitch
+    case 1
         % freely rotating bivariate gaussian function for least squares minimization
         % parameters: [xCenter, yCenter, angle, xSD, ySD, amplitude, offset]
         xR=@(x,y,xc,yc,th)(x-xc)*cos(th)-(y-yc)*sin(th);
@@ -98,7 +93,7 @@ switch ffSwitch
         f=@(p,X) exp( -xR(X(:,1), X(:,2), p(1), p(2), p(3)).^2/2/p(4)^2 + ...
             -yR( X(:,1), X(:,2), p(1), p(2), p(3)).^2/2/p(5)^2 ) *p(6) + p(7);
         
-    case 2        
+    case 2
         % fixed angle fit
         % parameters: [xCenter, yCenter, xSD, ySD, amplitude, offset]
         th=0;
@@ -174,6 +169,7 @@ if nFits > 50
     warning(['too many fits in frame number ' num2str(params.frameNumber)])
     fitPars=[];
     conf95=[];
+    outPut = [];
     return
 end
 
@@ -217,7 +213,7 @@ for ii = 1:nFits
     % fitting the data
     [x,y]=ndgrid(1:params.nPixels,1:params.nPixels);
     X=cat(2,x(:),y(:)) - params.nPixels/2;
-    [fitPars(ii,:),~,residual,~,~,~,jacobian] = ...
+    [fitPars(ii,:),~,residual,~,outPut(ii),~,jacobian] = ...
         lsqcurvefit(f,pStart,X(~isnan(truImg(:)),:),truImg(~isnan(truImg(:))),lb,ub,opts);
     
     % confidence intervals
@@ -254,5 +250,8 @@ end
 if nFits>0
     % shift center back to lab frame
     fitPars(:,[1,2])=fitPars(:,1:2)+locInds-params.nPixels;
+end
+if ~exist('outPut','var')
+    outPut = [];
 end
 end

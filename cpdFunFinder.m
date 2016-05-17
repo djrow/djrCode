@@ -19,7 +19,7 @@ m2=@(t,p)4*p(1)*t+p(2);
 m1=@(t,p)2*p(1)*t+p(2);
 
 pStart = [1, .5, .01, ...           % msd 1 parameters D1, L, S1
-        .01, .01, ...               % msd 2 parameters D2, S2
+        .1, .01, ...               % msd 2 parameters D2, S2
         .01, .01, ...               % msd 3 parameters D3, S3
         .5, .3, .25, .01];          % cpd function parameters amp1, amp2, amp3, immSize
 
