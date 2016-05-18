@@ -18,13 +18,13 @@ function [fitPars, conf95, g, outPut]=gaussFit(img, varargin)
 %
 %       Properties:     Descriptions:
 %
-%       findTheSpot:    1 or 0. Default behavior is to fit an
+%       searchBool:    1 or 0. Default behavior is to fit an
 %           ROI in the center of the image. If the spot is not near the
 %           center or the image is very large, findTheSpot enables the code
 %           to first roughly locate the spot and then use that location as
 %           the ROI center.
 %
-%       plottingFlag:   1 or 0. show plotting output. default is 0.
+%       showGuessing:   1 or 0. show output. default is 0.
 %
 %       widthGuess:     set the starting value for the width of the
 %                       Gaussian in units of pixels.
@@ -33,13 +33,14 @@ function [fitPars, conf95, g, outPut]=gaussFit(img, varargin)
 %                       is 11. the value should be odd.
 %
 % OUTPUTS:
-%       fitPars:        fitting coefficient vector, all units are pixels.
+%       fitPars:        fitting coefficient vector, units are pixels.
 %       fitCI:          95% confidence interval of fitting coefficients at
 %                       end of fitting
 % PROCEDURE:
 %       1. Peak guessing and/or data ROI selection of local area inside img
-%       2. Non-linear least squares minimization for 7 (or 6) - parameter
-%           Gaussian function on the ROI selected.
+%       2. Non-linear least squares minimization for 7 (or 6 or 5) -
+%       parameter Gaussian function on the ROI selected.
+% 
 % MODIFICATION HISTORY:
 %       Written by David J. Rowland, The University of Michigan, 3/16.
 % NOTES:

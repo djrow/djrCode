@@ -18,8 +18,8 @@ cParams.frameRate = 1/.04;
 paramsAn.checkVals = 0;
 paramsAn.phaseImages = 1;
 paramsAn.okWithPhase = 1;
-paramsAn.fittingBool = 1;
-paramsAn.trackingBool = 0;
+paramsAn.fittingBool = 0;
+paramsAn.trackingBool = 1;
 paramsAn.makeXls = 0;
 paramsAn.viewFits = 0;
 

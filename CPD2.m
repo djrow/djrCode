@@ -32,29 +32,30 @@ anProp.nMobile = 1;     % number of diffusive populations
 anProp.immBool = 0;     % presence or absence of stationary population
 anProp.tFrame = .04;    % camera integration time in seconds
 anProp.pixSize = .049;  % pixel size in microns
-anProp.maxTau = 5;      % maximum time lag in frames
+anProp.maxTau = 10;      % maximum time lag in frames
 anProp.confBool = 0;    % confined or unconfined diffusion
 anProp.globBool = 0;    % global or local cpd fit
 anProp.overBool = 0;    % use overlapping or non-overlapping displacements?
-anProp.plotBool = 0;    % plot output or not
+anProp.plotBool = 1;    % plot output or not
 anProp.dim = 2;         % 1d or 2d diffusion analysis
 anProp.whichDim = 1;    % for 1d diffusion, which dimension to consider
 anProp.rotAngle = pi/3; % for 1d diffusion, clockwise angle to rotate the trajectory
 anProp.bootNum = 1;     % number of bootstrap iterations
+
 fNames=fieldnames(anProp);
 
 % if any analysis parameters are included as inputs, change the analysis
 % parameters mentioned
 if nargin>1&&rem(nargin,2)==1
-    for ii=2:2:nargin
-        whichField = strcmp(fNames,varargin{ii-1});
+    for ii=1:2:nargin-1
+        whichField = strcmp(fNames,varargin{ii});
         
         if all(~whichField)
             warning(['Check spelling. ', ...
                 'Parameter change may have not occurred'])
         end
         
-        eval([fNames{whichField} ' = varargin{ii};'])
+        eval([fNames{whichField} ' = varargin{ii+1};'])
         eval(['anProp.' fNames{whichField} ' = ' fNames{whichField},';'])
     end
 elseif nargin>1
