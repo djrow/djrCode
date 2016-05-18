@@ -80,7 +80,7 @@ if nargin>1
             warning('Check spelling. Parameter change may have not occurred.')
         end
         
-        eval(['params.' fNames{whichField} ' = varargin{ii+2};'])
+        eval(['params.' fNames{whichField} ' = varargin{ii+1};'])
     end
 end
 
@@ -178,16 +178,20 @@ if params.showGuessing
     nFits = 0;
 end
 
+%% fit the data
 % pad the img(s) with nans (removed later).
 padsize=params.nPixels([1,1]);
-padVal=nan;
-direction='both';
-img=padarray(img,padsize,padVal,direction);
+img=padarray(img,padsize,nan,'both');
 locInds=locInds+params.nPixels;
 
-%% fit the data
+% starting guesses
+pStart(1)=0;
+pStart(2)=0;
+pStart(3)=params.widthGuess;
+
 fitPars = zeros(nFits,numel(lb));
 conf95 = zeros(nFits,numel(lb));
+
 for ii = 1:nFits
     % find the selection domain
     [sDom1,sDom2]=ndgrid(locInds(ii,1)-(params.nPixels-1)/2:locInds(ii,1)+(params.nPixels-1)/2, ...
@@ -196,14 +200,6 @@ for ii = 1:nFits
     
     % select the data
     truImg=double(reshape(img(inds),[params.nPixels,params.nPixels]));
-    
-    % x, y centers starting guess
-    pStart(1)=0;
-    pStart(2)=0;
-    
-    % xSD, ySD in units of pixels
-    pStart(3)=params.widthGuess;
-    %     pStart(4)=params.widthGuess;
     
     % amplitude, offset
     mVals=[max(truImg(:)),min(truImg(:))];

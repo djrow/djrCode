@@ -9,12 +9,6 @@ function paramsAn=masterfit3(mainfold,varargin)
 %
 % there are various usage settings below.
 
-% pay no attention to the man behind the curtain
-%#ok<*PFBNS>
-c=onCleanup(@()eval('fclose all'));
-opts.WindowStyle='normal';
-numDlgLines=1;
-
 %% parameters
 % CAMERA PARAMETERS
 cParams.pixelSize = 49;
@@ -22,24 +16,22 @@ cParams.frameRate = 1/.04;
 
 % ANALYSIS PARAMETERS
 paramsAn.checkVals = 0;
-paramsAn.phase = 1;
-paramsAn.oldPhaseMasks = 1;
-paramsAn.fitting = 1;
-paramsAn.tracking = 0;
-
+paramsAn.phaseImages = 1;
+paramsAn.okWithPhase = 1;
+paramsAn.fittingBool = 1;
+paramsAn.trackingBool = 0;
 paramsAn.makeXls = 0;
+paramsAn.viewFits = 0;
+
 paramsAn.bgsub = 0;
 paramsAn.bgsubWidth = 50;
 paramsAn.offset = 1000;
-paramsAn.viewFits = 0;
-paramsAn.minSep = 5;
+
 paramsAn.widthLB = 1;
 paramsAn.widthUB = 15;
-paramsAn.loadOldParams = 0;
-% fieldsAn = fieldnames(paramsAn);
 
 % PHASEMASK PARAMETERS.
-paramsPhase.nDilation = 2;
+paramsPhase.nDilation = 1;
 paramsPhase.lowThresh = 0;
 paramsPhase.highThresh = 1;
 paramsPhase.autofill = 1;
@@ -48,7 +40,7 @@ paramsPhase.maxArea = 1e4;
 fieldsPhase = fieldnames(paramsPhase);
 
 % PEAK GUESSING PARAMETERS,
-paramsPeaks.spotSizeLB = 1;
+paramsPeaks.spotSizeLB = 1.2;
 paramsPeaks.spotSizeUB = 10;
 paramsPeaks.intThresh = 300;
 paramsPeaks.hMax = 200;
@@ -65,6 +57,27 @@ paramsTr.swh = 1;
 paramsTr.delay = 0;
 fieldsTr = fieldnames(paramsTr);
 
+% reorganization to legacy format
+orgFun = @(in_p,in_ers,nf,fn,pIDs,gs) cat(2,...
+    fn*ones(nf,1),(1:nf)',...       % frame number, fit number
+    in_p(:,1),in_ers(:,1),...       % center 1, center 1 error
+    in_p(:,2),in_ers(:,2),...       % center 2, center 2 error
+    in_p(:,3),in_ers(:,3),...       % s.d., s.d. error
+    in_p(:,4),in_ers(:,4),...       % amplitude, amplitude error
+    in_p(:,5),in_ers(:,5),...       % offset, offset error
+    gs(:,1),gs(:,2),...             % guessesX, guessesY
+    nan(nf,1),nan(nf,1),nan(nf,1),...
+    nan(nf,1),nan(nf,1),nan(nf,1),... % 6 empty columns
+    pIDs, ...                       % cell number
+    nan(nf,1),nan(nf,1));           % empty columns
+
+% pay no attention to the man behind the curtain
+%#ok<*PFBNS>
+%#ok<*NASGU>
+c = onCleanup(@()eval('fclose all;'));
+opts.WindowStyle = 'normal';
+numDlgLines = 1;
+
 %% find all the movie files
 [datalist,dataloc,~]=uigetfile([mainfold filesep '*.nd2;*.tif*;*.bin'],...
     'Select the movies','multiselect','on');
@@ -75,12 +88,11 @@ if ~dataloc
 end
 
 if ~iscell(datalist); datalist={datalist}; end
-% for ii=1:numel(datalist); datalist{ii}=[dataloc datalist{ii}]; end
 datalist = cellfun(@(x)[dataloc, x],datalist,'uniformoutput',false);
 [dlocs,dnames,dexts]=cellfun(@fileparts,datalist,'uniformoutput',false);
 
 %% initialize analysis *.mat files
-if paramsAn.phase
+if paramsAn.phaseImages
     [phaselist,phaselistloc,~]=uigetfile([mainfold filesep...
         '*.nd2;*.tif*;*.bin'],'Select the phase images','multiselect','on');
     
@@ -90,7 +102,6 @@ if paramsAn.phase
     end
     
     if ~iscell(phaselist); phaselist={phaselist}; end
-%     for ii=1:numel(phaselist); phaselist{ii}=[phaselistloc phaselist{ii}]; end
     phaselist = cellfun(@(x)[phaselistloc, x],phaselist,'uniformoutput',false);
     [plocs,pnames,pexts]=cellfun(@fileparts,phaselist,'uniformoutput',false);
     
@@ -104,15 +115,15 @@ if paramsAn.phase
             phaseImg=imread(fullfile(plocs{ii},[pnames{ii},pexts{ii}]));
         end
         
-        m.phaseMask=phaseImg;
-    end    
+        m.phaseImg = phaseImg;
+    end
 else
     for ii=1:numel(dnames)
         [~,~,sz]=binGetFrames2([fullfile(dlocs{ii},dnames{ii}),'.bin'],1);
         m=matfile([fullfile(dlocs{ii},dnames{ii}),'_analysis.mat'],'Writable',true);
         
-        phaseMask=ones(sz);
-        m.phaseMask=phaseMask;
+        m.phaseMask = ones(sz);
+        m.phaseImg = ones(sz);
     end
 end
 
@@ -141,15 +152,12 @@ if paramsAn.bgsub
             fwrite(fid,nframes,'double');
             
             fclose(fid);
-            
-            % rename the data file names
-            dnames{ii}=[dnames{ii},'_bgsub'];
         end
         
         % rename the data names variable
         dnames{ii}=[dnames{ii},'_bgsub'];
     end
-elseif paramsAn.bgsub == 0
+else
     bFiles=dir([dataloc,'*.bin']);
     for ii=1:numel(dnames);
         if ~any(ismember({bFiles.name},[dnames{ii},'.bin']))
@@ -159,12 +167,10 @@ elseif paramsAn.bgsub == 0
 end
 
 %% compute phase mask
-if paramsAn.phase&&~paramsAn.oldPhaseMasks
+if paramsAn.phaseImages&&~paramsAn.okWithPhase
     for ii=1:numel(dnames)
         m=matfile([fullfile(dlocs{ii},dnames{ii}),'_analysis.mat'],'Writable',true);
-        
-        % phase image was first saved as the phase mask
-        phaseImg=m.phaseMask;
+        phaseImg=m.phaseImg;
         
         going = 1;
         while going
@@ -180,16 +186,16 @@ if paramsAn.phase&&~paramsAn.oldPhaseMasks
                 imshow(phaseImg,[])
                 
                 % prompt user for parameter changes
-                dlgPrompt=fieldsPhase;
-                dlgTitle='Phasemask Parameters';
                 dValues = cellfun(@num2str,num2cell(oldParams),'uniformoutput',0);
-                                
                 newParams=cellfun(@str2double,...
-                    inputdlg(dlgPrompt,dlgTitle,numDlgLines,dValues,opts))';
+                    inputdlg(fieldsPhase,'Phasemask Parameters',...
+                    numDlgLines,dValues,opts))';
                 
                 if isempty(newParams)
+                    % advance to next phase image if box is closed
                     going = 0;
                 elseif any(newParams~=oldParams)
+                    % change parameters if parameters changed
                     paramsPhase.nDilation = newParams(1);
                     paramsPhase.lowThresh = newParams(2);
                     paramsPhase.highThresh = newParams(3);
@@ -197,9 +203,11 @@ if paramsAn.phase&&~paramsAn.oldPhaseMasks
                     paramsPhase.minArea = newParams(5);
                     paramsPhase.maxArea = newParams(6);
                 else
-                    going = 0;      % advance to next phase image if no parameters changed
+                    % advance to next phase image if no parameters changed
+                    going = 0;
                 end
             else
+                % advance to next phase image if not checkVals
                 going = 0;
             end
         end
@@ -213,47 +221,32 @@ end
 
 %% analyze movie files
 for currMovie=1:numel(dnames)
-    [~,nFrames,vSize]=binGetFrames2([fullfile(...
-        dlocs{currMovie},dnames{currMovie}),'.bin'],1);
-    
-    m=matfile([fullfile(dlocs{currMovie},dnames{currMovie}),...
-        '_analysis.mat'],'Writable',true);
+    movieName = fullfile(dlocs{currMovie},dnames{currMovie});
+    [~,nFrames,vSize] = binGetFrames2([movieName,'.bin'],1);
+    m = matfile([movieName, '_analysis.mat'],'Writable',true);
+    phaseImg = m.phaseImg;
     
     try
         phaseMask = m.phaseMask;
     catch
-        warning('analysis has not been properly initialized. missing phase masks.')
-        phaseMask = ones(vSize);
+        warning(['missing phase mask in movie ' movieName(end-10:end)])
     end
     
-    phaseImg=imread(fullfile(plocs{currMovie},[pnames{currMovie},pexts{currMovie}]));
-    
-    goodFits = zeros(0,23);
-    if  ~paramsAn.fitting
-        try
-            goodFits = m.goodFits;
-            guesses = m.guesses;
-        catch
-            warning(['missing data in analysis file number ' num2str(currMovie)])
-            continue
-        end
-    else
+    if paramsAn.fittingBool
         %% fitting
         fprintf(['Fitting this movie: ',dnames{currMovie},'\n'])
         
-        p = cell(1,nFrames);
-        ers = cell(1,nFrames);
-        guesses = cell(1,nFrames);
-        outPut = cell(1,nFrames);
+        p = cell(1,nFrames); ers = p; guesses = p; outPut = p; p1 = p;
+        p2 = p; p3 = p; o1 = p; g1 = p; allFitsCell = p; nFits = p;
         if paramsAn.checkVals
-            % parameter checking version
             currFrame = 1;
-            while currFrame<=nFrames
-                thisframe=binGetFrames2(...
-                    [fullfile(dlocs{currMovie},dnames{currMovie}) '.bin'],currFrame);
+            
+            dlgPrompt = [fieldsPeaks; 'next frame number'];
+            while currFrame <= nFrames
+                thisframe=binGetFrames2([movieName '.bin'],currFrame);
                 
-                [p{currFrame},ers{currFrame},guesses{currFrame},outPut{currFrame}] = ...
-                    gaussFit(thisframe,phaseMask,...
+                [p{currFrame},ers{currFrame},guesses{currFrame},~] = ...
+                    gaussFit(thisframe,...
                     'spotSizeLB',paramsPeaks.spotSizeLB,...
                     'spotSizeUB',paramsPeaks.spotSizeUB,...
                     'intThresh',paramsPeaks.intThresh,...
@@ -262,40 +255,38 @@ for currMovie=1:numel(dnames)
                     'showGuessing',paramsAn.checkVals,...
                     'frameNumber',currFrame);
                 
-                % prompt user for parameter changes (and advance to next frame)
+                % prompt user for parameter changes
                 oldParams = [paramsPeaks.spotSizeLB,paramsPeaks.spotSizeUB,...
                     paramsPeaks.intThresh,paramsPeaks.hMax,paramsPeaks.lZero,currFrame+1];
-                dlgPrompt=[fieldsPeaks;'next frame number'];
-                dlgTitle='Peak Guessing. Close to advance to next movie.';
                 dValues=cellfun(@num2str,num2cell(oldParams),'uniformoutput',0);
-                
                 newParams = cellfun(@str2double,...
-                    inputdlg(dlgPrompt,dlgTitle,numDlgLines,dValues,opts))';
+                    inputdlg(dlgPrompt,'Peak Guessing',numDlgLines,dValues,opts))';
                 
                 if ~isempty(newParams)&&any(newParams ~= oldParams)
+                    % don't advance to next frame
                     paramsPeaks.spotSizeLB = newParams(1);
                     paramsPeaks.spotSizeUB = newParams(2);
                     paramsPeaks.intThresh = newParams(3);
                     paramsPeaks.hMax = newParams(4);
                     paramsPeaks.lZero = newParams(5);
-                    newParams(6) = newParams(6) - 1;    % don't advance to next frame
+                    newParams(6) = newParams(6) - 1;
                 end
                 
                 if isempty(newParams)
-                    currFrame = nFrames+1;              % advance to next movie
+                    % advance to next movie if box is closed
+                    currFrame = nFrames+1;
                 else
-                    currFrame = newParams(6);           % advance to user input frame.
+                    % advance to user input frame.
+                    currFrame = newParams(6);
                 end
             end
-            
-        else
+        elseif ~paramsAn.checkVals
             % parfor loop version
             parfor currFrame = 1:nFrames
-                thisframe=binGetFrames2(...
-                    [fullfile(dlocs{currMovie},dnames{currMovie}) '.bin'],currFrame);
+                thisframe = binGetFrames2([movieName '.bin'],currFrame);
                 
-                [p{currFrame},ers{currFrame},guesses{currFrame},outPut{currFrame}] = ...
-                    gaussFit(thisframe,phaseMask,...
+                [p{currFrame},ers{currFrame},guesses{currFrame},~] = ...
+                    gaussFit(thisframe,...
                     'spotSizeLB',paramsPeaks.spotSizeLB,...
                     'spotSizeUB',paramsPeaks.spotSizeUB,...
                     'intThresh',paramsPeaks.intThresh,...
@@ -304,67 +295,60 @@ for currMovie=1:numel(dnames)
                     'showGuessing',paramsAn.checkVals,...
                     'frameNumber',currFrame);
             end
-            
-            nFits = cellfun(@(x)size(x,1),p,'uniformoutput',0);
-            
-            % results selection and reorganization to legacy format
-            orgFun = @(in_p,in_ers,nf,fn,pmID) cat(2,...
-                fn*ones(nf,1),(1:nf)',...       % frame number, fit number
-                in_p(:,1),in_ers(:,1),...       % center 1, center 1 error
-                in_p(:,2),in_ers(:,2),...       % center 2, center 2 error
-                in_p(:,3),in_ers(:,3),...       % s.d., s.d. error
-                in_p(:,4),in_ers(:,4),...       % amplitude, amplitude error
-                in_p(:,5),in_ers(:,5),...       % offset, offset error
-                nan(nf,1),nan(nf,1),nan(nf,1),nan(nf,1),nan(nf,1),...
-                nan(nf,1),nan(nf,1),nan(nf,1),... % 8 empty columns
-                phaseMask(pmID),...             % phase mask ids
-                nan(nf,1),nan(nf,1));           % empty columns
+            display('done fitting')
             
             % cell id assignments
-            posInds = cellfun(@(x)x(:,1:2),p, 'uniformoutput', false);
-            posInds = cat(1,posInds{:});
-            posInds(posInds(:,1) > vSize(1) | posInds(:,2) > vSize(2) |... 
-                any(posInds < 1, 2),:) = nan;
+            p1 = cellfun(@(x)x(:,1) + 1 > vSize(1),p, 'uniformoutput', false);
+            p2 = cellfun(@(x)x(:,2) + 1 > vSize(2),p, 'uniformoutput', false);
+            p3 = cellfun(@(x)x(:,1)<1|x(:,2)<1,p, 'uniformoutput', false);
+            o1 = cellfun(@(x,y,z)x|y|z, p1, p2, p3, 'uniformoutput', false);
+            g1 = cellfun(@(x,y)ceil(repWith(x(:,1:2),y,nan)),p,o1, 'uniformoutput',false);
+            fitInds = cellfun(@(x)sub2ind(vSize,x(:,1),x(:,2)),g1, 'uniformoutput',false);
+            fitInds = cellfun(@(x)repWith(x,isnan(x),1),fitInds, 'uniformoutput',false);
+            pmID = cellfun(@(x)phaseMask(x),fitInds, 'uniformoutput',false);
+            nFits = cellfun(@(x)size(x,1),p, 'uniformoutput',false);
             
-            allFits = cellfun(orgFun,p,ers,nFits,num2cell(1:nFrames),...
-                sub2ind(vSize,posInds(:,1),posInds(:,2)), 'uniformoutput',0);
-            allFits = cat(1,allFits{:});
+            allFitsCell = cellfun(orgFun,...
+                p,ers,nFits,num2cell(1:nFrames),pmID,guesses, 'uniformoutput',0);
+            allFits = cat(1,allFitsCell{:});
             
+            % results selection
             whichGood = ...
                 allFits(:,7) > paramsAn.widthLB & ...
                 allFits(:,7) < paramsAn.widthUB & ...
                 allFits(:,21) > 0;
-            
             goodFits = allFits(whichGood,:);
             
             % WRITE ANALYSIS FILE
             m.goodFits = goodFits;
             m.allFits = allFits;
-            m.guesses = guesses;
-            m.outPut = outPut;
+%             m.guesses = guesses;
+            %             m.outPut = outPut;
             
-            imshow(phaseImg,[]); hold all
-            scatter(goodFits(:,5),goodFits(:,3),'.'); hold off
-            saveas(gcf,[fullfile(dlocs{currMovie},dnames{currMovie}) '_goodFits.fig'])
-            close
+            %             imshow(phaseImg,[]); hold all
+            %             scatter(goodFits(:,5),goodFits(:,3),'.'); hold off
+            %             saveas(gcf,[movieName '_goodFits.fig'])
+            %             close
+        end
+        
+        m.paramsPeaks = paramsPeaks;
+    elseif ~paramsAn.fittingBool
+        try
+            allFits = m.allFits;
+            goodFits = m.goodFits;
+%             guesses = m.guesses;
+        catch
+            warning(['missing data in analysis file number ' num2str(currMovie)])
+            continue
         end
     end
     
     %% Tracking
-    if ~paramsAn.tracking
-        try
-            trfile = m.trackfile;
-        catch
-            trfile = zeros(0,16);
-            warning(['no tracking data in analysis file number ' num2str(currMovie)])
-            continue
-        end
-    else
-        
-        % if goodfits is empty, don't bother tracking.
+    if paramsAn.trackingBool
         if isempty(goodFits)
             going = 0;
-            trfile = zeros(0,16);
+            trackfile = zeros(0,16);
+            warning('goodfits file is empty, but you wished to track')
         else
             going = 1;
         end
@@ -374,21 +358,22 @@ for currMovie=1:numel(dnames)
                 paramsTr.minTrLength, paramsTr.maxStepSize, paramsTr.swh, ...
                 paramsTr.delay];
             alpha=-log(oldParams(1))/oldParams(5);
-            trfile=Track_3D2(goodFits,[],[],oldParams(1),...
+            trackfile=Track_3D2(goodFits,[],[],oldParams(1),...
                 alpha,oldParams(3),oldParams(4),oldParams(6),...
                 cParams.pixelSize,oldParams(7),oldParams(2));
             
-            if isempty(trfile)
-                fprintf(['No available tracks for ''',dnames{currMovie}...
-                    '''. Check tracking parameters.\n']);
+            if isempty(trackfile)
+                warning(['No tracks found in ''[...', ...
+                    dnames{currMovie}(end-10:end) ...
+                    ']''. Check tracking parameters'])
             else
-                hastrack=unique(trfile(:,1))';
+                hastrack=unique(trackfile(:,1))';
                 cm=jet(numel(hastrack));
                 
                 imshow(phaseImg,[]); hold all
                 
                 for trnum = hastrack
-                    plot(trfile(trfile(:,1)==trnum,5),trfile(trfile(:,1)==trnum,4),...
+                    plot(trackfile(trackfile(:,1)==trnum,5),trackfile(trackfile(:,1)==trnum,4),...
                         'Color',cm(hastrack==trnum,:),'linewidth',1);
                 end
                 title([num2str(numel(hastrack)) ' tracks'])
@@ -397,25 +382,19 @@ for currMovie=1:numel(dnames)
                 saveas(gcf,[fullfile(dlocs{currMovie},dnames{currMovie}),'_tracks.fig']);
             end
             
-            if ~paramsAn.checkVals
-                % progress to next movie if parameters are assumed correct
-                going = 0;
-            else
+            if paramsAn.checkVals
                 % prompt user for parameter changes
-                dlgPrompt=fieldsTr;
-                dlgTitle='Tracking';
-                dValues={num2str(oldParams(1)),num2str(oldParams(2)),...
+                dValues = {num2str(oldParams(1)),num2str(oldParams(2)),...
                     num2str(oldParams(3)),num2str(oldParams(4)),...
                     num2str(oldParams(5)),num2str(oldParams(6)),...
                     num2str(oldParams(7))};
-                
-                newParams = cellfun(@str2double,inputdlg(dlgPrompt,...
-                    dlgTitle,numDlgLines,dValues,opts))';
+                newParams = cellfun(@str2double,inputdlg(fieldsTr,...
+                    'Tracking',numDlgLines,dValues,opts))';
                 if isempty(newParams)
                     going = 0;
                 end
                 
-                if ~isempty(newParams)&&any(newParams~=oldParams)
+                if ~isempty(newParams) && any(newParams ~= oldParams)
                     paramsTr.minMerit = newParams(1);
                     paramsTr.intTime = newParams(2);
                     paramsTr.gamma = newParams(3);
@@ -426,13 +405,24 @@ for currMovie=1:numel(dnames)
                 else
                     going = 0;  % progress to next movie if parameters are left unchanged
                 end
+            else
+                % progress to next movie if parameters are assumed correct
+                going = 0;
             end
             
-            m.paramsTr=paramsTr;
+            m.paramsTr = paramsTr;
         end
         
         % record tracking results
-        m.trackfile=trfile;
+        m.trackfile = trackfile;
+    elseif ~paramsAn.trackingBool
+        try
+            trackfile = m.trackfile;
+        catch
+            trackfile = zeros(0,16);
+            warning(['no tracking data in analysis file for ' movieName(end-10:end)])
+            continue
+        end
     end
     
     %% misc. outputs
@@ -450,7 +440,7 @@ for currMovie=1:numel(dnames)
         end
         
         Viewfits3([fullfile(dlocs{currMovie},dnames{currMovie}),'.bin'],...
-            goodFits,guesses,trfile,cParams.frameRate,bounds);
+            goodFits,trackfile,cParams.frameRate,bounds);
     end
     
     if paramsAn.makeXls
@@ -464,7 +454,7 @@ for currMovie=1:numel(dnames)
 end
 end
 
-function Viewfits3(vidloc,fitfile1,guesses,trfile,framerate,bounds)
+function Viewfits3(vidloc,fitfile1,trackfile,framerate,bounds)
 % This code takes in raw single-molecule tif frames and fits files and put
 % a square at each fit. Useful for checking to see if fitting parameters
 % are right.
@@ -493,6 +483,9 @@ for ii=1:nframes
         waitbar(ii/nframes,h)
     end
     
+    % which rows in the fits file belong to the current frame
+    r = find(fitfile1(:,1)==ii);
+    
     img=double(binGetFrames2(vidloc,ii));
     img=img(bounds(1):bounds(2),bounds(3):bounds(4));
     
@@ -501,9 +494,11 @@ for ii=1:nframes
     img=img/max(img(:));
     
     % Loop for all guess peaks in the current frame
-    for jj = 1:size(guesses{ii},1)
-        pix_x=guesses{ii}(jj,2)-bounds(3);
-        pix_y=guesses{ii}(jj,1)-bounds(1);
+    guessesX = fitfile1(r,14);
+    guessesY = fitfile1(r,15);
+    for jj = 1:size(guesses,1)
+        pix_x=guesses(jj,2)-bounds(3);
+        pix_y=guesses(jj,1)-bounds(1);
         if pix_x<sz(2)&&pix_y<sz(1)&&pix_x>0&&pix_y>0
             img=makeBox(img,intMax/2,pix_x,pix_y,halfBoxWidth,sz);
         end
@@ -512,9 +507,6 @@ for ii=1:nframes
     if any(size(img)~=sz)
         keyboard
     end
-    
-    % Indexing which rows in the fits file belong to the current frame
-    r=find(fitfile1(:,1)==ii);
     
     % Loop for all good fits in the current frame
     for jj=1:numel(r)
@@ -528,8 +520,8 @@ for ii=1:nframes
         keyboard
     end
     
-    if numel(trfile)>0
-        tr=trfile(trfile(:,2)==ii,:);
+    if numel(trackfile)>0
+        tr=trackfile(trackfile(:,2)==ii,:);
         
         cm=jet(5);
         img=img(:,:,[1,1,1]);
@@ -568,6 +560,11 @@ for ii=1:size(currentframe,3)
     currentframe(b:t,[l,r],ii)=curr_fr_maxint(ii);
     currentframe([b,t],l:r,ii)=curr_fr_maxint(ii);
 end
+end
+
+function out=repWith(in,inInds,val)
+in(inInds,:) = val;
+out = in;
 end
 
 function phaseMask=selectCells(phaseMask,img)
@@ -613,7 +610,7 @@ keyInput=0; clicksX=[]; clicksY=[];
 while keyInput~=121
     [clickX,clickY,keyInput]=ginput(1);
     plot(clickX,clickY,'m*','markersize',12);
-    clicksX=cat(1,clicksX,clickX); 
+    clicksX=cat(1,clicksX,clickX);
     clicksY=cat(1,clicksY,clickY);
 end
 
@@ -621,7 +618,7 @@ end
 if ~isempty(clicksX)
     posInds = ceil(cat(2,clicksX,clicksY));
     posInds(clicksX > vSize(1) | clicksY > vSize(2) | any(posInds < 1, 2),:) = nan;
-            
+    
     goodCells=phaseMask(sub2ind(vSize,posInds(:,1),posInds(:,2)));
     goodCells(goodCells == 0) = [];
     
