@@ -1,4 +1,4 @@
-function [fitPars, conf95, g, outPut]=gaussFit(img, varargin)
+function [fitPars, conf95, guesses, outPut]=gaussFit(img, varargin)
 %
 % NAME:
 %       gaussFit
@@ -40,7 +40,7 @@ function [fitPars, conf95, g, outPut]=gaussFit(img, varargin)
 %       1. Peak guessing and/or data ROI selection of local area inside img
 %       2. Non-linear least squares minimization for 7 (or 6 or 5) -
 %       parameter Gaussian function on the ROI selected.
-% 
+%
 % MODIFICATION HISTORY:
 %       Written by David J. Rowland, The University of Michigan, 3/16.
 % NOTES:
@@ -52,23 +52,31 @@ function [fitPars, conf95, g, outPut]=gaussFit(img, varargin)
 %       img = exp(-x.^2/2/2^2-y.^2/2/3^2)+.02*randn(size(x));
 %       p = gaussFit(img,'widthGuess',2);
 opts = optimset('Display','off');
-warning('off','all')
+% warning('off','all')
+imSize = size(img);
 
-% default parameters
-params.spotSizeLB = 1;
+%% parameters
+% peak guessing parameters
+params.spotSizeLB = 1.2;
 params.spotSizeUB = 10;
-params.intThresh = 1;
-params.lZero = 4;
-params.hMax = 1;
+params.intThresh = 300;
+params.lZero = 10;
+params.hMax = 200;
+
+% other parameters
 params.searchBool = 1;
-params.showFitting = 0;
-params.showGuessing = 0;
+params.checkVals = 0;
 params.widthGuess = 2;
-params.nPixels = 11;        % should be odd valued
 params.frameNumber = 1;
-params.ffSwitch = 3;        % 3 is a symmetric gaussian (5 parameters) fit
-                            % 2 is a fixed angle asymmetric gaussian fit
-                            % 1 is a 7 parameter asymmetric gaussian fit
+
+% fitting window width; should be odd valued
+params.nPixels = 11;
+
+% 3 is a symmetric gaussian (5 parameters) fit
+% 2 is a fixed angle asymmetric gaussian fit
+% 1 is a 7 parameter asymmetric gaussian fit
+params.ffSwitch = 3;
+
 fNames=fieldnames(params);
 
 % if any sim parameters are included as inputs, change the simulation
@@ -85,170 +93,183 @@ if nargin>1
     end
 end
 
+%% fitting functions
 switch params.ffSwitch
     case 1
         % freely rotating bivariate gaussian function for least squares minimization
         % parameters: [xCenter, yCenter, angle, xSD, ySD, amplitude, offset]
         xR=@(x,y,xc,yc,th)(x-xc)*cos(th)-(y-yc)*sin(th);
         yR=@(x,y,xc,yc,th)(x-xc)*sin(th)+(y-yc)*cos(th);
-        f=@(p,X) exp( -xR(X(:,1), X(:,2), p(1), p(2), p(3)).^2/2/p(4)^2 + ...
+        fFun=@(p,X) exp( -xR(X(:,1), X(:,2), p(1), p(2), p(3)).^2/2/p(4)^2 + ...
             -yR( X(:,1), X(:,2), p(1), p(2), p(3)).^2/2/p(5)^2 ) *p(6) + p(7);
-        
+        pStart = [];
+        lb = [];
+        ub = [];
     case 2
         % fixed angle fit
         % parameters: [xCenter, yCenter, xSD, ySD, amplitude, offset]
-        th=0;
-        xR=@(x,y,xc,yc)(x-xc)*cos(th)-(y-yc)*sin(th);
-        yR=@(x,y,xc,yc)(x-xc)*sin(th)+(y-yc)*cos(th);
-        f=@(p,X) exp( -xR(X(:,1), X(:,2), p(1), p(2)).^2/2/p(3)^2 + ...
+        th = 0;
+        xR = @(x,y,xc,yc)(x-xc)*cos(th)-(y-yc)*sin(th);
+        yR = @(x,y,xc,yc)(x-xc)*sin(th)+(y-yc)*cos(th);
+        fFun = @(p,X) exp( -xR(X(:,1), X(:,2), p(1), p(2)).^2/2/p(3)^2 + ...
             -yR( X(:,1), X(:,2), p(1), p(2)).^2/2/p(4)^2 ) *p(5) + p(6);
-        % bounds
-        lb=[-inf, -inf, 0, 0, -inf, -inf];
-        ub=[inf, inf, inf, inf, inf, inf];
-        
+        pStart = [];
+        lb = [-inf, -inf, 0, 0, -inf, -inf];
+        ub = [inf, inf, inf, inf, inf, inf];
     case 3
         % symmetric gaussian
-        f=@(p,X) exp( -((X(:,1)-p(1)).^2 + (X(:,2)-p(2)).^2)/2/p(3).^2) * p(4) + p(5);
+        fFun = @(p,X) exp( -((X(:,1)-p(1)).^2 + (X(:,2)-p(2)).^2)/2/p(3).^2) * p(4) + p(5);
+        pStart = [];
         lb = [-params.nPixels, -params.nPixels, 0, 0, -inf];
         ub = [params.nPixels*2, params.nPixels, inf, inf, inf];
-        
 end
+
+% starting guesses
+pStart(1) = 0;
+pStart(2) = 0;
+pStart(3) = params.widthGuess;
 
 %% rough localization of molecules
 if params.searchBool
     % band pass
-    bIm=bpassDJR(img, params.spotSizeLB, params.spotSizeUB, params.intThresh, params.lZero);
+    bIm = bpassDJR(img, params.spotSizeLB, params.spotSizeUB, params.intThresh, params.lZero);
     
-    % watershed algorithm
-    extImg=imextendedmax(bIm,params.hMax);
+    % watershed
+    extImg = imextendedmax(bIm,params.hMax);
     
-    % failed watershed algorithm can result in all ones
+    % failed watershed can result in all ones
     if all(extImg(:))
-        extImg=extImg-1;
+        extImg = extImg-1;
     end
     
     % shrink to a point. this is the estimated location of the spot
-    sIm=bwmorph(extImg,'shrink',inf);
+    sIm = bwmorph(extImg,'shrink',inf);
     
     % if shrinking the image produces rings, remove the rings
     cc = bwconncomp(sIm);
-    if cc.NumObjects<sum(sIm(:))
+    if cc.NumObjects < sum(sIm(:))
         whichBad = cellfun(@numel,cc.PixelIdxList) > 1;
         sIm(cc.PixelIdxList{whichBad}) = 0;
     end
     
-    if params.showGuessing
-        subplot(221)
-        imshow(img,[])
+    if params.checkVals
+        subplot(2,4,2)
+        imshow(img,[]); title(['Frame number ' num2str(params.frameNumber)])
         
-        subplot(222)
+        subplot(2,4,3)
         imshow(bIm,[])
         
-        subplot(223)
+        subplot(2,4,6)
         imshow(extImg,[])
         
-        subplot(224)
+        subplot(2,4,7)
         imshow(sIm,[])
-        
-        set(gcf,'NextPlot','add');
-        axes;
-        h = title(['Frame number ' num2str(params.frameNumber)]);
-        set(gca,'Visible','off');
-        set(h,'Visible','on');
     end
     
     % the index of the one pixel is a good guess for the particle location
-    [locInds(:,1),locInds(:,2)]=find(sIm);
-    g=locInds;
+    [guesses(:,1),guesses(:,2)] = find(sIm);
 else
     % otherwise, assume the spot is in near the center of the image
-    locInds=round(size(img)/2);
+    guesses = round(size(img)/2);
 end
 
-nFits = size(locInds,1);
+% number of fits
+nFits = size(guesses,1);
+
+% output initialization
 if nFits > 50
-    warning(['too many fits in frame number ' num2str(params.frameNumber)])
-    fitPars=[];
-    conf95=[];
-    outPut = [];
+    warning(['way too many fits in frame number ' num2str(params.frameNumber)])
+    fitPars = nan(1,5);
+    conf95 = nan(1,5);
+    guesses = nan(1,2);
+    outPut.firstorderopt = [];
+    outPut.iterations = [];
+    outPut.funcCount = [];
+    outPut.cgiterations = [];
+    outPut.algorithm = [];
+    outPut.stepsize = [];
+    outPut.message = [];
     return
+elseif nFits > 0
+    fitPars = nan(nFits,numel(lb));
+    conf95 = nan(nFits,numel(lb));
+    
+    outPut(nFits).firstorderopt = [];
+    outPut(nFits).iterations = [];
+    outPut(nFits).funcCount = [];
+    outPut(nFits).cgiterations = [];
+    outPut(nFits).algorithm = [];
+    outPut(nFits).stepsize = [];
+    outPut(nFits).message = [];
+else
+    fitPars = nan(1,5);
+    conf95 = nan(1,5);
+    guesses = nan(1,2);
+    outPut.firstorderopt = [];
+    outPut.iterations = [];
+    outPut.funcCount = [];
+    outPut.cgiterations = [];
+    outPut.algorithm = [];
+    outPut.stepsize = [];
+    outPut.message = [];
 end
 
-% skip the fitting if the guessing parameters are being checked
-if params.showGuessing
-    nFits = 0;
-end
+% pad the img(s) with nans (removed at end).
+padsize = params.nPixels(ones(1,2));
+img = padarray(img,padsize,nan,'both');
+guesses = guesses+params.nPixels;
 
 %% fit the data
-% pad the img(s) with nans (removed later).
-padsize=params.nPixels([1,1]);
-img=padarray(img,padsize,nan,'both');
-locInds=locInds+params.nPixels;
-
-% starting guesses
-pStart(1)=0;
-pStart(2)=0;
-pStart(3)=params.widthGuess;
-
-fitPars = zeros(nFits,numel(lb));
-conf95 = zeros(nFits,numel(lb));
+% fitting domain
+[x,y] = ndgrid(1:params.nPixels, 1:params.nPixels);
+X = cat(2,x(:),y(:)) - params.nPixels/2;
 
 for ii = 1:nFits
     % find the selection domain
-    [sDom1,sDom2]=ndgrid(locInds(ii,1)-(params.nPixels-1)/2:locInds(ii,1)+(params.nPixels-1)/2, ...
-        locInds(ii,2)-(params.nPixels-1)/2:locInds(ii,2)+(params.nPixels-1)/2);
-    inds=sub2ind(size(img),sDom1(:),sDom2(:));
+    [sDom1,sDom2] = ndgrid(guesses(ii,1)-(params.nPixels-1)/2:guesses(ii,1)+(params.nPixels-1)/2, ...
+        guesses(ii,2)-(params.nPixels-1)/2:guesses(ii,2)+(params.nPixels-1)/2);
+    inds = sub2ind(size(img),sDom1(:),sDom2(:));
     
     % select the data
-    truImg=double(reshape(img(inds),[params.nPixels,params.nPixels]));
+    truImg = img(inds);
     
-    % amplitude, offset
-    mVals=[max(truImg(:)),min(truImg(:))];
-    pStart(4)=mVals(1)-mVals(2);
-    pStart(5)=mVals(2);
+    % amplitude, offset starting values
+    mVals = [nanmax(truImg(:)),nanmin(truImg(:))];
+    pStart(4) = mVals(1)-mVals(2);
+    pStart(5) = mVals(2);
     
-    % fitting the data
-    [x,y]=ndgrid(1:params.nPixels,1:params.nPixels);
-    X=cat(2,x(:),y(:)) - params.nPixels/2;
-    [fitPars(ii,:),~,residual,~,outPut(ii),~,jacobian] = ...
-        lsqcurvefit(f,pStart,X(~isnan(truImg(:)),:),truImg(~isnan(truImg(:))),lb,ub,opts);
+    % fit the data
+    [fitPars(ii,:), ~, residual, ~, outPut(ii), ~, jacobian] = ...
+        lsqcurvefit(fFun,pStart,X(~isnan(truImg(:)),:),truImg(~isnan(truImg(:))),lb,ub,opts);
     
     % confidence intervals
-    conf95(ii,:) = diff(nlparci(fitPars(ii,:), residual,'jacobian',jacobian),1,2);
-    
-    % plot the output
-    if params.showFitting
-        fVals=reshape(f(fitPars(ii,:),X),[params.nPixels,params.nPixels]);
-        dVals=truImg;
-        sVals=reshape(f(pStart,X),[params.nPixels,params.nPixels]);
-        
-        subplot(221)
-        title('Data')
-        pcolor(kron(dVals,ones(10)))
-        shading flat; axis image; colorbar
-        
-        subplot(222)
-        title('starting values')
-        pcolor(kron(sVals,ones(10)))
-        shading flat; axis image; colorbar
-        
-        subplot(223)
-        title('fit result')
-        pcolor(kron(fVals,ones(10)))
-        shading flat; axis image; colorbar
-        
-        subplot(224)
-        title('residuals')
-        pcolor(kron(dVals - fVals,ones(10)))
-        shading flat; axis image; colorbar
-    end
+    conf95(ii,:) = diff(nlparci(fitPars(ii,:), residual, 'jacobian', jacobian), 1, 2);
 end
 
-if nFits>0
-    % shift center back to lab frame
-    fitPars(:,[1,2])=fitPars(:,1:2)+locInds-params.nPixels;
+%% shift origin back to lab frame
+fitPars(:,[1,2]) = fitPars(:,1:2) + guesses - params.nPixels;
+guesses = guesses - params.nPixels;
+
+%% plot the output
+if params.checkVals
+    [x,y] = ndgrid(1:imSize(1), 1:imSize(2));
+    X=cat(2,x(:),y(:));
+    fImg = zeros(imSize);
+    
+    for ii = 1:nFits
+        fImg = fImg + reshape(fFun(fitPars(ii,:),X),imSize);
+    end
+    fImg = fImg-nanmin(fImg(:));
+    
+    subplot(2,4,4)
+    imshow(fImg,[])
+    subplot(2,4,8)
+    imshow(img,[])
 end
-if ~exist('outPut','var')
-    outPut = [];
-end
+
+set(gcf,'NextPlot','add');
+axes
+h = title(['Frame number ' num2str(params.frameNumber)]);
+set(gca,'Visible','off');
+set(h,'Visible','on');
 end

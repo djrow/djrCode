@@ -16,58 +16,42 @@ function PhaseMask=valley2(f,params)
 %  User-Defined Parameters:
 %  ------------------------------------------------------------------------
 
-dilate_factor=params.nDilation; % 0;
 % Change the to zero only if you still have under-segmentation regardless
 % of threshold.
+dilate_factor=params.nDilation;
 
-lower_thresh=params.lowThresh;% 0;
 % Can be negative, but usually use [-1 0.5].
+lower_thresh=params.lowThresh;
 
-higher_thresh=params.highThresh;% .001;
 % Usually use positive values [0 3] , should be larger than
 % lower_threshold. *Decrease* this value first when cells are
 % UNDER-segmented (e.g., 2 or more cells grouped as 1 region).
+higher_thresh=params.highThresh;% .001;
 
-autofill=params.autofill;% 1;
+autofill=params.autofill;
 
 % Note: If cells are under-segmented, increase the lower_thresh and/or
 % decrease the higher_thresh (recommended); If cells are over-segmented,
 % decrease the lower_thresh and increase the higher_thresh.
-min_area=params.minArea;% 500;
+
 % minimum allowable area (in px) for a single segmented region. Regions
 % with area smaller than this will be discarded.
-max_area=params.maxArea; % 10000;
+min_area=params.minArea;
+
 % maximum allowable area (in px) for a single segmented region. Regions
 % with area larger than this will be discarded.
+max_area=params.maxArea;
+
 %%
 
-% [wlimg_name, wlimg_path, ~] = uigetfile({'*.tif','*.tiff'}, ...
-%     'Select a white-light image');
-% if wlimg_path == 0
-%     display('No white light image selected. Aborting program.')
-%     return
-% end
-% 
-% frame=imread([wlimg_path wlimg_name]);
-% f = frame;
-% figure, imshow(f, []); title('orginal')
 f=uint16(f);
 f=imcomplement(f); % Invert intensity
 
 % Laplacian of Gaussian filtering
 [g,~]=edge(f,'log', 0);
-% figure,imshow(~g,[])
-
-% h=fspecial('sobel');
-% fd=double(f);
-% g=sqrt(imfilter(fd,h,'replicate').^2+imfilter(fd,h','replicate').^2);
-% figure, imshow(g,[]); title('sobel');
 
 f = imfilter(f, fspecial('average', 5), 'replicate');
 % figure, imshow(f, []); title('average- or gaussian- filtered image');
-
-
-% figure, imshow(f, []); title('inverted')
 
 %-------------------------------------------------------------------------%
 % Define Valley filters
@@ -128,11 +112,6 @@ f7 = bwlabel(f6, 4);
 
 seg_area = regionprops(f7, 'area');
 
-% for i = 1:length(seg_area)
-%     if seg_area(i,1).Area < min_area || seg_area(i,1).Area > max_area
-%         f7(f7 == i) = 0; % Get rid of small regions
-%     end
-% end
 f7(ismember(f7,find([seg_area.Area]<min_area|[seg_area.Area]>max_area)))=0;
 
 f7 = bwmorph(f7, 'dilate', dilate_factor);
@@ -144,40 +123,11 @@ f7 = bwmorph(f7, 'dilate', dilate_factor);
 f7 = bwlabel(~bwmorph(~f7,'diag',5));
 % figure, imshow(f7, []); title('Unfilled Phase Mask')
 
-conv_hull = regionprops(f7, 'Convexhull');
-
-% for i = 1:length(conv_hull)
-%     hold all,
-%     plot(conv_hull(i,1).ConvexHull(:,1),conv_hull(i,1).ConvexHull(:,2), 'r-' ,'linewidth', 2)
-%     axis ij equal
-% end
-
-% dah= bwconvhull(f7~=0,'objects',4);figure,imshow(dah)
-
 PhaseMask = f7;
 
 if autofill == 1
     PhaseMask = bwconvhull(PhaseMask~=0,'objects',4);
     PhaseMask = bwlabel(PhaseMask, 4);
-    conv_hull = regionprops(PhaseMask, 'Convexhull');
-%     close all
-%     figure, imshow(frame, []); title('orginal');
-%     figure,imshow(PhaseMask, []); title('Autofilled Phase Mask');
-%     for i = 1:length(conv_hull)
-%         hold all,
-%         plot(conv_hull(i,1).ConvexHull(:,1),conv_hull(i,1).ConvexHull(:,2), 'c-' ,'linewidth', 2)
-%         axis ij equal
-%     end
+    % figure, imshow(PhaseMask, []); title('Filled Phase Mask')
 end
 end
-
-% %-------------------------------------------------------------------------%
-% % Plot contour of convex hull and scale it up by x10
-% conv_contour = zeros(size(f7).*10);
-% figure,imshow(conv_contour,'border','tight');
-% for i = 1:length(conv_hull)
-%     hold all,
-%     plot(conv_hull(i,1).ConvexHull(:,1).*10,conv_hull(i,1).ConvexHull(:,2).*10, 'c-' ,'linewidth', 2)
-%     axis ij equal
-% end
-% %-------------------------------------------------------------------------%

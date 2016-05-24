@@ -1,7 +1,9 @@
-function dOut=CPD2(mainfold,varargin)
+function dOut = CPD2(mainfold,varargin)
 % tracking data in the analysis files must be in pixels.
 
 opts = optimset('Display','off');
+
+dInds = [1,3];
 
 if ischar(mainfold)
     %% find the relevant files
@@ -34,13 +36,13 @@ anProp.tFrame = .04;    % camera integration time in seconds
 anProp.pixSize = .049;  % pixel size in microns
 anProp.maxTau = 10;      % maximum time lag in frames
 anProp.confBool = 0;    % confined or unconfined diffusion
-anProp.globBool = 0;    % global or local cpd fit
+anProp.globBool = 1;    % global or local cpd fit
 anProp.overBool = 0;    % use overlapping or non-overlapping displacements?
 anProp.plotBool = 1;    % plot output or not
 anProp.dim = 2;         % 1d or 2d diffusion analysis
 anProp.whichDim = 1;    % for 1d diffusion, which dimension to consider
 anProp.rotAngle = pi/3; % for 1d diffusion, clockwise angle to rotate the trajectory
-anProp.bootNum = 1;     % number of bootstrap iterations
+anProp.bootNum = 25;     % number of bootstrap iterations
 
 fNames=fieldnames(anProp);
 
@@ -132,7 +134,7 @@ nSteps = cellfun(@numel,sqSteps,'uniformoutput',0);
 % time lag domain
 tau = (1:anProp.maxTau)'*anProp.tFrame;
 
-dOut = zeros(1,anProp.bootNum);
+dOut = zeros(numel(dInds),anProp.bootNum);
 h=waitbar(0,'boot reps');
 c=onCleanup(@()close(h));
 for kk = 1:anProp.bootNum
@@ -140,7 +142,8 @@ for kk = 1:anProp.bootNum
     y=cellfun(@(x,y)sort(x(randsample(y,y,1))*anProp.pixSize.^2),sqSteps,nSteps,'uniformoutput',0);
     %         y=cellfun(@(x)x*anProp.pixSize.^2,sqSteps,'uniformoutput',0);
     
-    if anProp.globBool % GLOBAL FITTING
+    if anProp.globBool
+        %% GLOBAL FITTING
         linCell=@(x)cat(1,x{:});
         fHandle=@(p,tau,sqSteps,ranks)linCell(...
             cellfun(@(x,y)x-y,...
@@ -154,10 +157,10 @@ for kk = 1:anProp.bootNum
             pStart{1},bounds{1},bounds{2},opts);
         resids = cellfun(@(x,y)x-y,oRanks,eHandle(x,tau,sqSteps),'uniformoutput',0);
         
-        dOut(kk)=x(1);
+        dOut(:,kk)=x(dInds);
         
-    elseif ~anProp.globBool % LOCAL FITTING
-        
+    elseif ~anProp.globBool 
+        %% LOCAL FITTING
         % fit the cpd curves to get the msd values
         for ii=1:anProp.maxTau
             cpdLB = bounds{1};
@@ -185,7 +188,7 @@ for kk = 1:anProp.bootNum
                 msdLB,msdUB,opts);
             resids{2,ii} = msdFun(tau,x(ii,:)) - y;
             
-            dOut(kk)=x(1);
+            dOut(:,kk)=x(dInds);
         end
     end
 end
@@ -193,7 +196,7 @@ end
 %% plot results
 if ~anProp.globBool&&anProp.plotBool
     a=figure;
-    dOut=figure;
+    b=figure;
     
     figure(a)
     for ii = 1:anProp.maxTau
@@ -214,7 +217,7 @@ if ~anProp.globBool&&anProp.plotBool
         loglog(steps,abs(resids{1,ii}),'.')
     end
     
-    figure(dOut)
+    figure(b)
     for ii = 1:anProp.nMobile
         % data
         subplot(2,anProp.nMobile,(ii-1)*2+1)

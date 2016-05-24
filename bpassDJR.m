@@ -93,8 +93,6 @@ if nargin < 4, threshold = 0; end
 
 normalize = @(x) x/sum(x);
 
-image_array = double(image_array);
-
 if lnoise == 0
   gaussian_kernel = 1;
 else      
