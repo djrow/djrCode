@@ -38,10 +38,10 @@ if ~isstruct(dType)
     
     % diffusion coefficients in microns^2/s
     d1=.1;
-    d2=.1;
+    d2=.001;
     
     % fraction of total steps taken by each diffusing population
-    d1Frac=1/3;
+    d1Frac=2/3;
     d2Frac=1/3;
     
     % confinement lengths in each dimension in microns
@@ -51,7 +51,7 @@ if ~isstruct(dType)
     % camera integration time in seconds
     intTime=.04;
     
-    % standard deviation of the noise in pixels
+    % standard deviation of the noise in microns
     sdNoise=.02;
     
 else
@@ -132,8 +132,9 @@ tr=cellfun(@(x,n)organize(x,n),tr,num2cell(1:numel(tr)),'uniformoutput',0);
 % axis([-.1,cLength2+.1,-.1,cLength1+.1])
 % title(diffusionTitles{dType})
 
-% concatenate tracks into one matrix
-tr=cat(1,tr{:});
+% concatenate tracks into one matrix and convert to pixels^2/s
+tr = cat(1,tr{:});
+tr(:,[4,5]) = tr(:,[4,5])/mpp;
 
 % save the diffusion type info
 caseInfo.diffusionTitle=diffusionTitles{dType};

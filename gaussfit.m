@@ -55,7 +55,7 @@ opts = optimset('Display','off');
 % warning('off','all')
 imSize = size(img);
 
-%% parameters
+%% default parameters
 % peak guessing parameters
 params.spotSizeLB = 1.2;
 params.spotSizeUB = 10;
@@ -154,7 +154,7 @@ if params.searchBool
     
     if params.checkVals
         subplot(2,4,2)
-        imshow(img,[]); title(['Frame number ' num2str(params.frameNumber)])
+        imshow(img,[]);
         
         subplot(2,4,3)
         imshow(bIm,[])
@@ -222,7 +222,7 @@ guesses = guesses+params.nPixels;
 %% fit the data
 % fitting domain
 [x,y] = ndgrid(1:params.nPixels, 1:params.nPixels);
-X = cat(2,x(:),y(:)) - params.nPixels/2;
+X = cat(2,x(:),y(:)) - params.nPixels/2 - .5;
 
 for ii = 1:nFits
     % find the selection domain
@@ -239,14 +239,17 @@ for ii = 1:nFits
     pStart(5) = mVals(2);
     
     % fit the data
-    [fitPars(ii,:), ~, residual, ~, outPut(ii), ~, jacobian] = ...
-        lsqcurvefit(fFun,pStart,X(~isnan(truImg(:)),:),truImg(~isnan(truImg(:))),lb,ub,opts);
-    
+%     [fitPars(ii,:), ~, residual, ~, outPut(ii), ~, jacobian] = ...
+%         lsqcurvefit(fFun,pStart,X(~isnan(truImg(:)),:),truImg(~isnan(truImg(:))),lb,ub,opts);
+    fitPars(ii,:) = lsqcurvefit(fFun,pStart,X(~isnan(truImg(:)),:),truImg(~isnan(truImg(:))),lb,ub,opts);
     % confidence intervals
-    conf95(ii,:) = diff(nlparci(fitPars(ii,:), residual, 'jacobian', jacobian), 1, 2);
+%     conf95(ii,:) = diff(nlparci(fitPars(ii,:), residual, 'jacobian', jacobian), 1, 2);
+    
 end
+% disabled confidence intervals
+conf95 = fitPars;
 
-%% shift origin back to lab frame
+%% shift origins back to lab frame
 fitPars(:,[1,2]) = fitPars(:,1:2) + guesses - params.nPixels;
 guesses = guesses - params.nPixels;
 

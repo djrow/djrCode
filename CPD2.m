@@ -1,9 +1,7 @@
-function dOut = CPD2(mainfold,varargin)
+function [dOut] = CPD2(mainfold,varargin)
 % tracking data in the analysis files must be in pixels.
 
 opts = optimset('Display','off');
-
-dInds = [1,3];
 
 if ischar(mainfold)
     %% find the relevant files
@@ -13,15 +11,15 @@ if ischar(mainfold)
     
     if ~dataloc
         display('no data selected')
-        x=[];
+        dOut = [];
         return
     end
     
-    tr=cell(1,numel(datalist));
+    tr=cell(1,numel(datalist)); tic
     for ii=1:numel(datalist)
         m=matfile(fullfile(dataloc,datalist{ii}));
         tr{ii}=m.trackfile;
-    end
+    end; toc
 else
     tr=mainfold;
     if ~iscell(tr)
@@ -34,15 +32,15 @@ anProp.nMobile = 1;     % number of diffusive populations
 anProp.immBool = 0;     % presence or absence of stationary population
 anProp.tFrame = .04;    % camera integration time in seconds
 anProp.pixSize = .049;  % pixel size in microns
-anProp.maxTau = 10;      % maximum time lag in frames
+anProp.maxTau = 5;      % maximum time lag in frames
 anProp.confBool = 0;    % confined or unconfined diffusion
 anProp.globBool = 1;    % global or local cpd fit
-anProp.overBool = 0;    % use overlapping or non-overlapping displacements?
-anProp.plotBool = 1;    % plot output or not
+anProp.overBool = 1;    % use overlapping or non-overlapping displacements?
+anProp.plotBool = 0;    % plot output or not
 anProp.dim = 2;         % 1d or 2d diffusion analysis
 anProp.whichDim = 1;    % for 1d diffusion, which dimension to consider
 anProp.rotAngle = pi/3; % for 1d diffusion, clockwise angle to rotate the trajectory
-anProp.bootNum = 25;     % number of bootstrap iterations
+anProp.bootNum = 200;   % number of bootstrap iterations
 
 fNames=fieldnames(anProp);
 
@@ -62,7 +60,7 @@ if nargin>1&&rem(nargin,2)==1
     end
 elseif nargin>1
     warning('use paired inputs')
-    x = [];
+    dOut = [];
     return
 end
 
@@ -84,8 +82,16 @@ for kk=1:numel(tr)
     
     if ~isempty(trackNums)
         for ii = trackNums
-            tracks = tr{kk}(tr{kk}(:,1)==ii,[4,5]);
-            nLocs = size(tracks,1);
+            tracks = tr{kk}(tr{kk}(:,1)==ii,[2,4,5]);
+            
+            % fill in the time holes with nans
+            fixedTrack = nan(max(tracks(:,1)),size(tracks,2));
+            fixedTrack(tracks(:,1),:) = tracks;
+            
+            % remove leading nans
+            fixedTrack(1:find(all(isnan(fixedTrack),2)==0,1,'first')-1,:) = [];
+            
+            nLocs = size(fixedTrack,1);
             for jj=1:anProp.maxTau
                 if anProp.overBool
                     indvec1=jj+1:nLocs;
@@ -96,12 +102,13 @@ for kk=1:numel(tr)
                     indvec2=indvec2(2:end);
                 end
                 
+                % calculate squared step sizes
                 if anProp.dim == 2
-                    allSqSteps{ii,jj}=sum( (tracks(indvec1,:) - ...
-                        tracks(indvec2,:)).^2, 2);
+                    allSqSteps{ii,jj}=nansum( (fixedTrack(indvec1,[2,3]) - ...
+                        fixedTrack(indvec2,[2,3])).^2, 2);
                 elseif anProp.dim == 1
-                    allSqSteps{ii,jj}=(tracks(indvec1,:) - ...
-                        tracks(indvec2,:)).^2;
+                    allSqSteps{ii,jj}=(fixedTrack(indvec1,[2,3]) - ...
+                        fixedTrack(indvec2,[2,3])).^2;
                 end
             end
         end
@@ -129,16 +136,18 @@ end
 nSteps = cellfun(@numel,sqSteps,'uniformoutput',0);
 
 %% fitting function selection
-[cpdFun,msdFun,pStart,bounds] = cpdFunFinder(anProp);
+[cpdFun,msdFun,pStart,bounds,dID] = cpdFunFinder(anProp);
 
-% time lag domain
+% time lag domain in seconds
 tau = (1:anProp.maxTau)'*anProp.tFrame;
 
-dOut = zeros(numel(dInds),anProp.bootNum);
+dOut = zeros(numel(dID),anProp.bootNum);
 h=waitbar(0,'boot reps');
 c=onCleanup(@()close(h));
 for kk = 1:anProp.bootNum
     waitbar(kk/anProp.bootNum)
+    
+    % converts track positions from pixels to microns
     y=cellfun(@(x,y)sort(x(randsample(y,y,1))*anProp.pixSize.^2),sqSteps,nSteps,'uniformoutput',0);
     %         y=cellfun(@(x)x*anProp.pixSize.^2,sqSteps,'uniformoutput',0);
     
@@ -153,13 +162,14 @@ for kk = 1:anProp.bootNum
         eHandle=@(p,tau,sqSteps)cellfun(@(x,y)cpdFun(x,y,p),...
             sqSteps,num2cell(msdFun(tau,p),2),'uniformoutput',0);
         
-        x=lsqnonlin(@(p)fHandle(p,tau,y,oRanks),...
+        fParams=lsqnonlin(@(p)fHandle(p,tau,y,oRanks),...
             pStart{1},bounds{1},bounds{2},opts);
-        resids = cellfun(@(x,y)x-y,oRanks,eHandle(x,tau,sqSteps),'uniformoutput',0);
         
-        dOut(:,kk)=x(dInds);
+        temp=cellfun(@(x)x*anProp.pixSize.^2,sqSteps,'uniformoutput',0);
+        resids = cellfun(@(x,y)x-y,oRanks,eHandle(fParams,tau,temp),'uniformoutput',0);
         
-    elseif ~anProp.globBool 
+        dOut(:,kk)=fParams(dID);
+    elseif ~anProp.globBool
         %% LOCAL FITTING
         % fit the cpd curves to get the msd values
         for ii=1:anProp.maxTau
@@ -167,29 +177,29 @@ for kk = 1:anProp.bootNum
             cpdUB = bounds{2};
             cpdStart = pStart{1};
             
-            anProp.nMobile = sum(isnan(cpdStart));
+            % this loop replaces nans
             for jj = 1:anProp.nMobile
-                cpdStart(jj) = mean(y{ii})/(10^(jj-1));
+                cpdStart(jj) = mean(y{ii})/(10^(jj-1))*anProp.tFrame;
             end
+            
             msds(:,ii)=lsqcurvefit(@(p,x)cpdFun(x,p),...
                 cpdStart,y{ii},oRanks{ii},cpdLB,cpdUB,opts);
             resids{1,ii} = cpdFun(y{ii},msds(:,ii)) - oRanks{ii};
         end
         
         % fit msds to get diffusion coefficient
-        x=nan(anProp.nMobile,numel(pStart{2}));
         for ii = 1 : anProp.nMobile
             y=msds(ii,:)';
             msdStart = pStart{2};
             msdLB = bounds{3};
             msdUB = bounds{4};
             
-            x(ii,:)=lsqcurvefit(@(p,x)msdFun(x,p),msdStart,tau,y,...
+            fParams(ii,:)=lsqcurvefit(@(p,x)msdFun(x,p),msdStart,tau,y,...
                 msdLB,msdUB,opts);
-            resids{2,ii} = msdFun(tau,x(ii,:)) - y;
+            resids{2,ii} = msdFun(tau,fParams(ii,:)) - y;
             
-            dOut(:,kk)=x(dInds);
-        end
+            dOut(ii,kk)=fParams(ii,1);
+        end        
     end
 end
 
@@ -222,15 +232,16 @@ if ~anProp.globBool&&anProp.plotBool
         % data
         subplot(2,anProp.nMobile,(ii-1)*2+1)
         plot(tau,msds(ii,:),'o'); title('data'); hold on
-        plot(tau,msdFun(tau,x(ii,:))); hold off
+        plot(tau,msdFun(tau,fParams(ii,:))); hold off
         
         % residuals
         subplot(2,anProp.nMobile,(ii-1)*2+2);
         plot(tau,resids{2,ii}); title('residuals')
     end
 elseif anProp.plotBool
-    y=cellfun(@times,sqSteps,num2cell(anProp.pixSize.^2*ones(anProp.maxTau,1)),'uniformoutput',0);
-    fRes = eHandle(x,tau,y);
+    figure
+    y = cellfun(@times,sqSteps,num2cell(anProp.pixSize.^2*ones(anProp.maxTau,1)),'uniformoutput',0);
+    fRes = eHandle(fParams,tau,y);
     
     axLims{1}(1:2) = [min(cellfun(@(x)min(x),y)),...
         max(cellfun(@(x)max(x),y))];
@@ -258,4 +269,11 @@ elseif anProp.plotBool
     end
     hold off
 end
+
+figure
+for ii=1:numel(dID)
+%     subplot(1,numel(dID),ii)
+    ecdf(dOut(ii,:)); hold all
+end; hold off
+xlabel('d in microns^2/s')
 end

@@ -1,4 +1,4 @@
-function [cpdFun,msdFun,pStart,bounds]=cpdFunFinder(anProp)
+function [cpdFun,msdFun,pStart,bounds,dID]=cpdFunFinder(anProp)
 
 dim = anProp.dim;
 nDiffs = anProp.nMobile;
@@ -18,10 +18,10 @@ m2=@(t,p)4*p(1)*t+p(2);
 % 1d unconfined msd function
 m1=@(t,p)2*p(1)*t+p(2);
 
-pStart = [.1, .5, .01, ...           % msd 1 parameters D1, L, S1
-        .01, .01, ...               % msd 2 parameters D2, S2
-        .01, .01, ...               % msd 3 parameters D3, S3
-        .5, .3, .25, .01];          % cpd function parameters amp1, amp2, amp3, immSize
+pStart = [.01, .5, .1, ...           % msd 1 parameters D1, L, S1
+    .001, .1, ...               % msd 2 parameters D2, S2
+    .0001, .1, ...               % msd 3 parameters D3, S3
+    2/3, .3, .25, .1];          % cpd function parameters amp1, amp2, amp3, immSize
 
 switch globBool
     case 1
@@ -41,14 +41,14 @@ switch globBool
                                             m2(tau,p(1:2));
                                         cpdFun=@(x,y,p)1-...
                                             c2(x,y(1),1);
-                                        pId=[1,3];
+                                        pID=[1,3];
                                         
                                     case 1 % 1 confined diffuser in 2D
                                         msdFun=@(tau,p)...
                                             confMSD2(tau,p(1:3));
                                         cpdFun=@(x,y,p)1-...
                                             c2(x,y(1),1);
-                                        pId=1:3;
+                                        pID=1:3;
                                 end
                             case 2 % 2 diffusers
                                 switch confBool
@@ -59,7 +59,7 @@ switch globBool
                                         cpdFun=@(x,y,p)1-...
                                             c2(x,y(1),p(5))-...
                                             c2(x,y(2),1-p(5));
-                                        pId=[1,3,4,5,8];
+                                        pID=[1,3,4,5,8];
                                         
                                     case 1 % 2 confined diffusers in 2D
                                         msdFun=@(tau,p)cat(2,...
@@ -68,7 +68,7 @@ switch globBool
                                         cpdFun=@(x,y,p)1-...
                                             c2(x,y(1),p(6))-...
                                             c2(x,y(2),1-p(6));
-                                        pId=[1:5,8];
+                                        pID=[1:5,8];
                                 end
                             case 3
                                 switch confBool
@@ -81,7 +81,7 @@ switch globBool
                                             c2(x,y(1),p(7))-...
                                             c2(x,y(2),p(8))-...
                                             c2(x,y(3),1-p(7)-p(8));
-                                        pId=[1,3:7,8:9];
+                                        pID=[1,3:7,8:9];
                                         
                                     case 1 % 3 confined diffusers in 2D
                                         msdFun=@(tau,p)cat(2,...
@@ -92,7 +92,7 @@ switch globBool
                                             c2(x,y(1),p(8))-...
                                             c2(x,y(2),p(9))-...
                                             c2(x,y(3),1-p(8)-p(9));
-                                        pId=[1:7,8:9];
+                                        pID=[1:7,8:9];
                                 end
                         end
                     case 1 % 1 immobile term
@@ -105,14 +105,14 @@ switch globBool
                                         cpdFun=@(x,y,p)1-...
                                             c2(x,y+p(4),p(3))-...
                                             c2(x,p(4),1-p(3));
-                                        pId=[1,3,8,11];
+                                        pID=[1,3,8,11];
                                     case 1 % 1 confined diffuser with 1 imm in 2D
                                         msdFun=@(tau,p)...
                                             confMSD2(tau,p(1:3));
                                         cpdFun=@(x,y,p)1-...
                                             c2(x,y+p(5),p(4))-...
                                             c2(x,p(5),1-p(4));
-                                        pId=[1:3,8,11];
+                                        pID=[1:3,8,11];
                                 end
                             case 2 % 2 diffusers
                                 switch confBool
@@ -124,7 +124,7 @@ switch globBool
                                             c2(x,y(1)+p(7),p(5))-...
                                             c2(x,y(2)+p(7),p(6))-...
                                             c2(x,p(7),1-p(5)-p(6));
-                                        pId=[1,3:5,8,9,11];
+                                        pID=[1,3:5,8,9,11];
                                     case 1 % 2 confined diffusers with 1 immobile population in 2D
                                         msdFun=@(tau,p)cat(2,...
                                             confMSD2(tau,p(1:3)),...
@@ -133,7 +133,7 @@ switch globBool
                                             c2(x,y(1)+p(8),p(6))-...
                                             c2(x,y(2)+p(8),p(7))-...
                                             c2(x,p(8),1-p(6)-p(7));
-                                        pId=[1:5,8,9,11];
+                                        pID=[1:5,8,9,11];
                                 end
                             case 3
                                 switch confBool
@@ -147,7 +147,7 @@ switch globBool
                                             c2(x,y(2)+p(10),p(8))-...
                                             c2(x,y(3)+p(10),p(9))-...
                                             c2(x,p(10),1-p(7)-p(8)-p(9));
-                                        pId=[1,3:5,8:11];
+                                        pID=[1,3:5,8:11];
                                     case 1 % 3 confined diffusers with 1 immobile population in 2D
                                         msdFun=@(tau,p)cat(2,...
                                             confMSD2(tau,p(1:3)),...
@@ -158,7 +158,7 @@ switch globBool
                                             c2(x,y(2)+p(11),p(9))-...
                                             c2(x,y(3)+p(11),p(10))-...
                                             c2(x,p(11),1-p(8)-p(9)-p(10));
-                                        pId=[1:5,8:11];
+                                        pID=[1:5,8:11];
                                 end
                         end
                 end
@@ -173,13 +173,13 @@ switch globBool
                                             m1(tau,p(1:2));
                                         cpdFun=@(x,y,p)...
                                             c1(x,y(1),1);
-                                        pId=[1,3];
+                                        pID=[1,3];
                                     case 1 % 1 confined diffuser in 1D
                                         msdFun=@(tau,p)...
                                             confMSD1(tau,p(1:3));
                                         cpdFun=@(x,y,p)...
                                             c1(x,y(1),1);
-                                        pId=1:3;
+                                        pID=1:3;
                                 end
                             case 2 % 2 diffusers
                                 switch confBool
@@ -190,7 +190,7 @@ switch globBool
                                         cpdFun=@(x,y,p)...
                                             c1(x,y(1),p(5))-...
                                             c1(x,y(2),1-p(5));
-                                        pId=[1,3:5,8];
+                                        pID=[1,3:5,8];
                                     case 1 % 2 confined diffusers in 1D
                                         msdFun=@(tau,p)cat(2,...
                                             confMSD1(tau,p(1:3)),...
@@ -198,7 +198,7 @@ switch globBool
                                         cpdFun=@(x,y,p)...
                                             c1(x,y(1),p(6))-...
                                             c1(x,y(2),1-p(6));
-                                        pId=[1:5,8];
+                                        pID=[1:5,8];
                                 end
                             case 3
                                 switch confBool
@@ -211,7 +211,7 @@ switch globBool
                                             c1(x,y(1),p(7))-...
                                             c1(x,y(2),p(8))-...
                                             c1(x,y(3),1-p(7)-p(8));
-                                        pId=[1,3:9];
+                                        pID=[1,3:9];
                                         
                                     case 1 % 3 confined diffusers in 1D
                                         msdFun=@(tau,p)cat(2,...
@@ -222,9 +222,9 @@ switch globBool
                                             c1(x,y(1),p(8))-...
                                             c1(x,y(2),p(9))-...
                                             c1(x,y(3),1-p(8)-p(9));
-                                        pId=1:9;
+                                        pID=1:9;
                                 end
-
+                                
                         end
                     case 1 % 1 immobile term
                         switch nDiffs
@@ -236,14 +236,14 @@ switch globBool
                                         cpdFun=@(x,y,p)...
                                             c1(x,y+p(4),p(3))-...
                                             c1(x,p(4),1-p(3));
-                                        pId=[1,3,8,11];
+                                        pID=[1,3,8,11];
                                     case 1 % 1 confined diffuser with 1 immobile population in 1D
                                         msdFun=@(tau,p)...
                                             confMSD1(tau,p(1:3));
                                         cpdFun=@(x,y,p)...
                                             c1(x,y+p(5),p(4))-...
                                             c1(x,p(5),1-p(4));
-                                        pId=[1:3,8,11];
+                                        pID=[1:3,8,11];
                                 end
                             case 2 % 2 diffusers
                                 switch confBool
@@ -255,7 +255,7 @@ switch globBool
                                             c1(x,y(1)+p(7),p(5))-...
                                             c1(x,y(2)+p(7),p(6))-...
                                             c1(x,p(7),1-p(5)-p(6));
-                                        pId=[1,3:5,8,9,11];
+                                        pID=[1,3:5,8,9,11];
                                     case 1 % 2 confined diffusers with 1 immobile population in 1D
                                         msdFun=@(tau,p)cat(1,...
                                             confMSD1(tau,p(1:3)),...
@@ -264,7 +264,7 @@ switch globBool
                                             c1(x,y(1)+p(8),p(6))-...
                                             c1(x,y(2)+p(8),p(7))-...
                                             c1(x,p(8),1-p(6)-p(7));
-                                        pId=[1:5,8,9,11];
+                                        pID=[1:5,8,9,11];
                                 end
                             case 3
                                 switch confBool
@@ -278,7 +278,7 @@ switch globBool
                                             c1(x,y(2)+p(10),p(8))-...
                                             c1(x,y(3)+p(10),p(9))-...
                                             c1(x,p(10),1-p(7)-p(8)-p(9));
-                                        pId=[1,3:11];
+                                        pID=[1,3:11];
                                     case 1 % 3 confined diffusers with 1 immobile population in 1D
                                         msdFun=@(tau,p)cat(1,...
                                             confMSD1(tau,p(1:3)),...
@@ -289,16 +289,16 @@ switch globBool
                                             c1(x,y(2)+p(11),p(9))-...
                                             c1(x,y(3)+p(11),p(10))-...
                                             c1(x,p(11),1-p(8)-p(9)-p(10));
-                                        pId=1:11;
+                                        pID=1:11;
                                 end
-
+                                
                         end
                 end
         end
         
-        pStart={pStart(pId)};
-        bounds=[{LB(pId)},{UB(pId)}];
-        
+        pStart={pStart(pID)};
+        bounds=[{LB(pID)},{UB(pID)}];
+        dID = find(ismember(pID,[1,4,6]));
     case 0
         %% local fitting
         switch confBool
@@ -318,6 +318,7 @@ switch globBool
                                         cpdStart = nan;
                                         cpdLB = 0;
                                         cpdUB = inf;
+                                        dID = 1;
                                     case 2
                                         cpdFun=@(x,p)1-...
                                             c1(x,p(1),p(3))-...
@@ -325,6 +326,7 @@ switch globBool
                                         cpdStart = [nan, nan, .5];
                                         cpdLB = [0, 0, 0];
                                         cpdUB = [inf, inf, 1];
+                                        dID = [1,3];
                                     case 3
                                         cpdFun=@(x,p)1-...
                                             c1(x,p(1),p(4))-...
@@ -333,6 +335,7 @@ switch globBool
                                         cpdStart = [nan, nan, nan, .3, .3];
                                         cpdLB = [0, 0, 0, 0, 0];
                                         cpdUB = [inf, inf, inf, 1, 1];
+                                        dID = [1,3,5];
                                 end
                             case 1 % immPop
                                 switch nDiffs
@@ -343,6 +346,7 @@ switch globBool
                                         cpdStart = [nan, pStart(8), .5];
                                         cpdLB = [0, 0, 0];
                                         cpdUB = [inf, inf, 1];
+                                        dID = 1;
                                     case 2
                                         cpdFun=@(x,p)1-...
                                             c1(x,p(1)+p(3),p(4))-...
@@ -351,6 +355,7 @@ switch globBool
                                         cpdStart = [nan, nan, pStart(8), .3, .3];
                                         cpdLB = [0, 0, 0, 0, 0];
                                         cpdUB = [inf, inf, inf, 1, 1];
+                                        dID = [1,3];
                                     case 3
                                         cpdFun=@(x,p)1-...
                                             c1(x,p(1)+p(4),p(5))-...
@@ -360,6 +365,7 @@ switch globBool
                                         cpdStart = [nan, nan, nan, pStart(8), .25, .25, .25];
                                         cpdLB = [0, 0, 0, 0, 0, 0, 0];
                                         cpdUB = [inf, inf, inf, inf, 1, 1, 1];
+                                        dID = [1,3,5];
                                 end
                         end
                     case 2 % dim
@@ -373,6 +379,7 @@ switch globBool
                                         cpdStart = nan;
                                         cpdLB = 0;
                                         cpdUB = inf;
+                                        dID = 1;
                                     case 2
                                         cpdFun=@(x,p)1-...
                                             c2(x,p(1),p(3))-...
@@ -380,6 +387,7 @@ switch globBool
                                         cpdStart = [nan, nan, .5];
                                         cpdLB = [0, 0, 0];
                                         cpdUB = [inf, inf, 1];
+                                        dID = [1,3];
                                     case 3
                                         cpdFun=@(x,p)1-...
                                             c2(x,p(1),p(4))-...
@@ -388,6 +396,7 @@ switch globBool
                                         cpdStart = [nan, nan, nan, .3, .3];
                                         cpdLB = [0, 0, 0, 0, 0];
                                         cpdUB = [inf, inf, inf, 1, 1];
+                                        dID = [1,3,5];
                                 end
                             case 1 % immPop
                                 switch nDiffs
@@ -398,14 +407,16 @@ switch globBool
                                         cpdStart = [nan, pStart(8), .5];
                                         cpdLB = [0, 0, 0];
                                         cpdUB = [inf, inf, 1];
+                                        dID = 1;
                                     case 2
                                         cpdFun=@(x,p)1-...
                                             c2(x,p(1)+p(3),p(4))-...
                                             c2(x,p(2)+p(3),p(5))-...
                                             c2(x,p(3),1-p(4)-p(5));
-                                        cpdStart = [nan, pStart(8), .3, .3];
+                                        cpdStart = [nan, nan, pStart(8), .3, .3];
                                         cpdLB = [0, 0, 0, 0, 0];
                                         cpdUB = [inf, inf, inf, 1, 1];
+                                        dID = [1,3];
                                     case 3
                                         cpdFun=@(x,p)1-...
                                             c2(x,p(1)+p(4),p(5))-...
@@ -415,6 +426,7 @@ switch globBool
                                         cpdStart = [nan, nan, nan, pStart(8), .25, .25, .25];
                                         cpdLB = [0, 0, 0, 0, 0, 0, 0];
                                         cpdUB = [inf, inf, inf, inf, 1, 1, 1];
+                                        dID = [1,3,5];
                                 end
                         end
                 end
@@ -434,6 +446,7 @@ switch globBool
                                         cpdStart = nan;
                                         cpdLB = 0;
                                         cpdUB = inf;
+                                        dID = 1;
                                     case 2
                                         cpdFun=@(x,p)1-...
                                             c1(x,p(1),p(3))-...
@@ -441,6 +454,7 @@ switch globBool
                                         cpdStart = [nan, nan, .5];
                                         cpdLB = [0, 0, 0];
                                         cpdUB = [inf, inf, 1];
+                                        dID = [1,3];
                                     case 3
                                         cpdFun=@(x,p)1-...
                                             c1(x,p(1),p(4))-...
@@ -449,6 +463,7 @@ switch globBool
                                         cpdStart = [nan, nan, nan, .3, .3];
                                         cpdLB = [0, 0, 0, 0, 0];
                                         cpdUB = [inf, inf, inf, 1, 1];
+                                        dID = [1,3,5];
                                 end
                             case 1 % immPop
                                 switch nDiffs
@@ -459,6 +474,7 @@ switch globBool
                                         cpdStart = [nan, pStart(8), .5];
                                         cpdLB = [0, 0, 0];
                                         cpdUB = [inf, inf, 1];
+                                        dID = 1;
                                     case 2
                                         cpdFun=@(x,p)1-...
                                             c1(x,p(1)+p(3),p(4))-...
@@ -467,6 +483,7 @@ switch globBool
                                         cpdStart = [nan, nan, pStart(8), .3, .3];
                                         cpdLB = [0, 0, 0, 0, 0];
                                         cpdUB = [inf, inf, inf, 1, 1];
+                                        dID = [1,3];
                                     case 3
                                         cpdFun=@(x,p)1-...
                                             c1(x,p(1)+p(4),p(5))-...
@@ -476,6 +493,7 @@ switch globBool
                                         cpdStart = [nan, nan, nan, pStart(8), .25, .25, .25];
                                         cpdLB = [0, 0, 0, 0, 0, 0, 0];
                                         cpdUB = [inf, inf, inf, inf, 1, 1, 1];
+                                        dID = [1,3,5];
                                 end
                         end
                     case 2 % dim
@@ -489,6 +507,7 @@ switch globBool
                                         cpdStart = nan;
                                         cpdLB = 0;
                                         cpdUB = inf;
+                                        dID = 1;
                                     case 2
                                         cpdFun=@(x,p)1-...
                                             c2(x,p(1),p(3))-...
@@ -496,6 +515,7 @@ switch globBool
                                         cpdStart = [nan, nan, .5];
                                         cpdLB = [0, 0, 0];
                                         cpdUB = [inf, inf, 1];
+                                        dID = [1,3];
                                     case 3
                                         cpdFun=@(x,p)1-...
                                             c2(x,p(1),p(4))-...
@@ -504,6 +524,7 @@ switch globBool
                                         cpdStart = [nan, nan, nan, .3, .3];
                                         cpdLB = [0, 0, 0, 0, 0];
                                         cpdUB = [inf, inf, inf, 1, 1];
+                                        dID = [1,3,5];
                                 end
                             case 1 % immPop
                                 switch nDiffs
@@ -514,6 +535,7 @@ switch globBool
                                         cpdStart = [nan, pStart(8), .5];
                                         cpdLB = [0, 0, 0];
                                         cpdUB = [inf, inf, 1];
+                                        dID = 1;
                                     case 2
                                         cpdFun=@(x,p)1-...
                                             c2(x,p(1)+p(3),p(4))-...
@@ -522,6 +544,7 @@ switch globBool
                                         cpdStart = [nan, nan, pStart(8), .3, .3];
                                         cpdLB = [0, 0, 0, 0, 0];
                                         cpdUB = [inf, inf, inf, 1, 1];
+                                        dID = [1,3];
                                     case 3
                                         cpdFun=@(x,p)1-...
                                             c2(x,p(1)+p(4),p(5))-...
@@ -531,6 +554,7 @@ switch globBool
                                         cpdStart = [nan, nan, nan, pStart(8), .25, .25, .25];
                                         cpdLB = [0, 0, 0, 0, 0, 0, 0];
                                         cpdUB = [inf, inf, inf, inf, 1, 1, 1];
+                                        dID = [1,3,5];
                                 end
                         end
                 end

@@ -15,11 +15,11 @@ cParams.pixelSize = 49;
 cParams.frameRate = 1/.04;
 
 % ANALYSIS PARAMETERS
-paramsAn.checkVals = 1;
+paramsAn.checkVals = 0;
 paramsAn.phaseImages = 1;
-paramsAn.okWithPhase = 0;
+paramsAn.okWithPhase = 1;
 paramsAn.fittingBool = 1;
-paramsAn.trackingBool = 0;
+paramsAn.trackingBool = 1;
 paramsAn.makeXls = 0;
 paramsAn.viewFits = 0; % 'all';
 
@@ -565,12 +565,7 @@ subplot(121);
 imshow(img,[]);
 subplot(122);
 imshow(phaseMask~=0,[]);
-title('Click the cells to be analyzed. Enter to Proceed.')
 
-% Now move the axes slightly so that the top of the title is visible
-set(h,'Units','normalized')
-P=get(h,'Position');
-set(h,'Position',P+[0 -0.03 0 0])
 hold all
 
 % highlight the outlines of the cells
@@ -578,6 +573,12 @@ rProp=regionprops(phaseMask,'Convexhull');
 for i=1:numel(rProp)
     plot(rProp(i,1).ConvexHull(:,1),rProp(i,1).ConvexHull(:,2),'c-','linewidth',2)
 end
+
+set(gcf,'NextPlot','add');
+axes
+h1 = title('Click the cells to be analyzed. Enter to Proceed.');
+set(gca,'Visible','off');
+set(h1,'Visible','on');
 
 % Let the user pick cells with good shapes
 keyInput=0; clicksX=[]; clicksY=[];
