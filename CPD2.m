@@ -1,7 +1,10 @@
-function [dOut] = CPD2(mainfold,varargin)
+function [dOut,aOut,BIC] = CPD2(mainfold,varargin)
 % tracking data in the analysis files must be in pixels.
 
 opts = optimset('Display','off');
+%#ok<*PFBNS>
+
+nY = @(m,v,x)exp(-(x-m).^2/2/v)/sqrt(2*pi*v);
 
 if ischar(mainfold)
     %% find the relevant files
@@ -11,7 +14,6 @@ if ischar(mainfold)
     
     if ~dataloc
         display('no data selected')
-        dOut = [];
         return
     end
     
@@ -35,12 +37,12 @@ anProp.pixSize = .049;  % pixel size in microns
 anProp.maxTau = 5;      % maximum time lag in frames
 anProp.confBool = 0;    % confined or unconfined diffusion
 anProp.globBool = 1;    % global or local cpd fit
-anProp.overBool = 1;    % use overlapping or non-overlapping displacements?
+anProp.overBool = 0;    % use overlapping or non-overlapping displacements?
 anProp.plotBool = 0;    % plot output or not
 anProp.dim = 2;         % 1d or 2d diffusion analysis
 anProp.whichDim = 1;    % for 1d diffusion, which dimension to consider
 anProp.rotAngle = pi/3; % for 1d diffusion, clockwise angle to rotate the trajectory
-anProp.bootNum = 200;   % number of bootstrap iterations
+anProp.bootNum = 200;   % number of bootstraps
 
 fNames=fieldnames(anProp);
 
@@ -104,10 +106,10 @@ for kk=1:numel(tr)
                 
                 % calculate squared step sizes
                 if anProp.dim == 2
-                    allSqSteps{ii,jj}=nansum( (fixedTrack(indvec1,[2,3]) - ...
+                    allSqSteps{kk,ii,jj}=nansum( (fixedTrack(indvec1,[2,3]) - ...
                         fixedTrack(indvec2,[2,3])).^2, 2);
                 elseif anProp.dim == 1
-                    allSqSteps{ii,jj}=(fixedTrack(indvec1,[2,3]) - ...
+                    allSqSteps{kk,ii,jj}=(fixedTrack(indvec1,[2,3]) - ...
                         fixedTrack(indvec2,[2,3])).^2;
                 end
             end
@@ -118,7 +120,8 @@ end
 if anProp.dim == 2
     sqSteps=cell(anProp.maxTau,1);
     for ii=1:anProp.maxTau
-        sqSteps{ii}=sort(cat(1,allSqSteps{:,ii}));
+        wSteps = cat(1,allSqSteps{:,:,ii});
+        sqSteps{ii}=sort(wSteps(wSteps > eps));     % nansum puts zeros where there were nans
     end
     oRanks=cellfun(@(x)linspace(0,1,numel(x))',sqSteps,'uniformoutput',0);
 else
@@ -134,146 +137,125 @@ else
     oRanks=cellfun(@(x)linspace(0,1,size(x,1))',sqSteps,'uniformoutput',0);
 end
 nSteps = cellfun(@numel,sqSteps,'uniformoutput',0);
+nTotal = sum(cat(1,nSteps{:}));
 
 %% fitting function selection
-[cpdFun,msdFun,pStart,bounds,dID] = cpdFunFinder(anProp);
+funFinds = cpdFunFinder(anProp)
+cpdFun = funFinds.cpdFun;
+msdFun = funFinds.msdFun;
+pStart = funFinds.pStart;
+bounds = funFinds.bounds;
+dID = funFinds.dID;
+aID = funFinds.aID;
 
 % time lag domain in seconds
 tau = (1:anProp.maxTau)'*anProp.tFrame;
 
-dOut = zeros(numel(dID),anProp.bootNum);
-h=waitbar(0,'boot reps');
-c=onCleanup(@()close(h));
-for kk = 1:anProp.bootNum
-    waitbar(kk/anProp.bootNum)
+if anProp.globBool
+    %% GLOBAL FITTING
+    linCell=@(x)cat(1,x{:});
+    fHandle=@(p,tau,sqSteps,ranks)linCell(...
+        cellfun(@(x,y)x-y,...
+        cellfun(@(x,y)cpdFun(x,y,p),...
+        sqSteps,num2cell(msdFun(tau,p),2),'uniformoutput',0),...
+        ranks,'uniformoutput',0));
+    eHandle=@(p,tau,sqSteps)cellfun(@(x,y)cpdFun(x,y,p),...
+        sqSteps,num2cell(msdFun(tau,p),2),'uniformoutput',0);
     
-    % converts track positions from pixels to microns
-    y=cellfun(@(x,y)sort(x(randsample(y,y,1))*anProp.pixSize.^2),sqSteps,nSteps,'uniformoutput',0);
-    %         y=cellfun(@(x)x*anProp.pixSize.^2,sqSteps,'uniformoutput',0);
-    
-    if anProp.globBool
-        %% GLOBAL FITTING
-        linCell=@(x)cat(1,x{:});
-        fHandle=@(p,tau,sqSteps,ranks)linCell(...
-            cellfun(@(x,y)x-y,...
-            cellfun(@(x,y)cpdFun(x,y,p),...
-            sqSteps,num2cell(msdFun(tau,p),2),'uniformoutput',0),...
-            ranks,'uniformoutput',0));
-        eHandle=@(p,tau,sqSteps)cellfun(@(x,y)cpdFun(x,y,p),...
-            sqSteps,num2cell(msdFun(tau,p),2),'uniformoutput',0);
+    fParams = zeros(numel(pStart{1}),anProp.bootNum); 
+%     resnorm = zeros(anProp.bootNum,1);
+    resids = zeros(nTotal,anProp.bootNum);
+    parfor kk = 1:anProp.bootNum
+        % converts track positions from pixels to microns and resamples at the same
+        % time
+        y=cellfun(@(x,y)sort(x(randsample(y,y,1))*anProp.pixSize.^2),sqSteps,nSteps,'uniformoutput',0);
         
-        fParams=lsqnonlin(@(p)fHandle(p,tau,y,oRanks),...
+        [fParams(:,kk),~,resids(:,kk)] = lsqnonlin(@(p)fHandle(p,tau,y,oRanks),...
             pStart{1},bounds{1},bounds{2},opts);
+    end
+    dOut = fParams(dID,:);
+    aOut = fParams(aID,:);
+    BIC = nTotal*log(mean(resids.^2,1)) + numel(pStart{1})*log(nTotal);
+elseif ~anProp.globBool
+    %% LOCAL FITTING
+    cpdLB = bounds{1};
+    cpdUB = bounds{2};
+    msdLB = bounds{3};
+    msdUB = bounds{4};
+    
+    fParams1a = zeros(numel(pStart{1}),anProp.maxTau,anProp.bootNum);
+    aOut = zeros(numel(aID),anProp.maxTau,anProp.bootNum);
+    resnorm = zeros(anProp.bootNum,anProp.maxTau);
+    parfor kk = 1:anProp.bootNum
+        cpdStart = pStart{1};
+        msdStart = pStart{2};
         
-        temp=cellfun(@(x)x*anProp.pixSize.^2,sqSteps,'uniformoutput',0);
-        resids = cellfun(@(x,y)x-y,oRanks,eHandle(fParams,tau,temp),'uniformoutput',0);
+        fParams1 = zeros(numel(cpdStart),anProp.maxTau);
+        fParams2 = zeros(numel(msdStart),anProp.nMobile);
         
-        dOut(:,kk)=fParams(dID);
-    elseif ~anProp.globBool
-        %% LOCAL FITTING
+        y=cellfun(@(x,y)sort(x(randsample(y,y,1))*anProp.pixSize.^2),sqSteps,nSteps,'uniformoutput',0);
+        
         % fit the cpd curves to get the msd values
-        for ii=1:anProp.maxTau
-            cpdLB = bounds{1};
-            cpdUB = bounds{2};
-            cpdStart = pStart{1};
-            
-            % this loop replaces nans
+        for mm=1:anProp.maxTau
             for jj = 1:anProp.nMobile
-                cpdStart(jj) = mean(y{ii})/(10^(jj-1))*anProp.tFrame;
+                cpdStart(jj) = mean(y{mm})/(10^(jj-1))*anProp.tFrame;
             end
-            
-            msds(:,ii)=lsqcurvefit(@(p,x)cpdFun(x,p),...
-                cpdStart,y{ii},oRanks{ii},cpdLB,cpdUB,opts);
-            resids{1,ii} = cpdFun(y{ii},msds(:,ii)) - oRanks{ii};
+            [fParams1(:,mm),~] = lsqcurvefit(@(p,x)cpdFun(x,p),...
+                cpdStart,y{mm},oRanks{mm},cpdLB,cpdUB,opts);
         end
         
-        % fit msds to get diffusion coefficient
-        for ii = 1 : anProp.nMobile
-            y=msds(ii,:)';
-            msdStart = pStart{2};
-            msdLB = bounds{3};
-            msdUB = bounds{4};
-            
-            fParams(ii,:)=lsqcurvefit(@(p,x)msdFun(x,p),msdStart,tau,y,...
+        fParams1a(:,:,kk) = fParams1;
+        
+        % fit msds to get diffusion coefficients
+        for mm = 1 : anProp.nMobile
+            fParams2(:,mm)=lsqcurvefit(@(p,x)msdFun(x,p),msdStart,tau,fParams1(mm,:)',...
                 msdLB,msdUB,opts);
-            resids{2,ii} = msdFun(tau,fParams(ii,:)) - y;
-            
-            dOut(ii,kk)=fParams(ii,1);
-        end        
+            %             resids{2,ii} = msdFun(tau,fParams(ii,:)) - msds(ii,:)';
+        end
+        dOut(:,kk) = fParams2(dID,:);
+        aOut(:,:,kk) = fParams1(aID,:);
     end
+    
+    % calculate BIC
+%     mean(-log(nY(mean(x),var(x),x)))
+    BIC = nTotal*log(resnorm.^2) + numel(pStart{1})*log(nTotal);
 end
 
-%% plot results
-if ~anProp.globBool&&anProp.plotBool
-    a=figure;
-    b=figure;
+%% plot fits
+if anProp.plotBool
+    %     figure
+    %     if anProp.globBool
+    %         fRes = eHandle(fParams(:,1),tau,y);
+    %         for ii = 1:anProp.maxTau
+    %             subplot(1,anProp.maxTau,ii)
+    %             plot(y{ii},cat(2,oRanks{ii},fRes{ii}),'.')
+    %             set(gca,'xscale','log')
+    %         end
+    %
+    %     elseif ~anProp.globBool
+    %         for ii = 1:anProp.maxTau
+    %             subplot(1,anProp.maxTau,ii)
+    %             plot(y{ii},cat(2,oRanks{ii},cpdFun(y{ii},fParams1a(1,ii,:))),'.')
+    %             set(gca,'xscale','log')
+    %         end
+    %     end
+    subplot(131)
+    for ii=1:size(dOut,1)
+        %     subplot(1,numel(dID),ii)
+        ecdf(dOut(ii,:)); hold all
+    end; hold off
+    xlabel('d in microns^2/s')
+    set(gca,'xscale','log')
     
-    figure(a)
-    for ii = 1:anProp.maxTau
-        steps = sqSteps{ii}*anProp.pixSize.^2;
-        ranks = oRanks{ii};
-        
-        % data
-        ind=sub2ind([anProp.maxTau,2],ii,1);
-        subplot(2,anProp.maxTau,ind);
-        title(['data for tau = ' num2str(ii)])
-        
-        % fittign result
-        loglog(steps,cat(2,ranks,cpdFun(steps,msds(:,ii))),'.')
-        
-        % residuals
-        ind=sub2ind([anProp.maxTau,2],ii,2);
-        subplot(2,anProp.maxTau,ind); title('residuals')
-        loglog(steps,abs(resids{1,ii}),'.')
-    end
+    subplot(132)
+    for ii = 1:size(aOut,1)
+        ecdf(aOut(ii,:)); hold all
+    end; hold off
+    xlabel('relative population amplitudes')
     
-    figure(b)
-    for ii = 1:anProp.nMobile
-        % data
-        subplot(2,anProp.nMobile,(ii-1)*2+1)
-        plot(tau,msds(ii,:),'o'); title('data'); hold on
-        plot(tau,msdFun(tau,fParams(ii,:))); hold off
-        
-        % residuals
-        subplot(2,anProp.nMobile,(ii-1)*2+2);
-        plot(tau,resids{2,ii}); title('residuals')
-    end
-elseif anProp.plotBool
-    figure
-    y = cellfun(@times,sqSteps,num2cell(anProp.pixSize.^2*ones(anProp.maxTau,1)),'uniformoutput',0);
-    fRes = eHandle(fParams,tau,y);
-    
-    axLims{1}(1:2) = [min(cellfun(@(x)min(x),y)),...
-        max(cellfun(@(x)max(x),y))];
-    axLims{1}(3:4) = [min(cellfun(@(x)min(x),oRanks)),max(cellfun(@(x)max(x),oRanks))];
-    
-    axLims{2}(1:2) = [min(cellfun(@(x)min(abs(x)),resids)),...
-        max(cellfun(@(x)max(abs(x)),resids))];
-    for ii = 1:anProp.maxTau
-        steps = sqSteps{ii}*anProp.pixSize.^2;
-        ranks = oRanks{ii};
-        
-        % data
-        ind=sub2ind([anProp.maxTau,2],ii,1);
-        subplot(2,anProp.maxTau,ind);
-        loglog(steps,cat(2,ranks,fRes{ii}),'.')
-        title(['data for tau = ' num2str(ii)])
-        axis(axLims{1})
-        
-        % residuals
-        ind=sub2ind([anProp.maxTau,2],ii,2);
-        subplot(2,anProp.maxTau,ind)
-        loglog(steps,abs(resids{ii}),'.');
-        title('residuals')
-        axis([axLims{1}(1:2),axLims{2}])
-    end
-    hold off
+    subplot(133)
+    for ii = 1:anProp.bootNum
+        plot(resids(:,ii)); hold all
+    end; hold off
 end
-
-figure
-for ii=1:numel(dID)
-%     subplot(1,numel(dID),ii)
-    ecdf(dOut(ii,:)); hold all
-end; hold off
-xlabel('d in microns^2/s')
 end

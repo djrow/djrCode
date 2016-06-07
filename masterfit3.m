@@ -1,4 +1,4 @@
-function paramsAn=masterfit3(mainfold,varargin)
+function paramsAn=masterfit3(mainfold)
 % mainfold should have nd2 files or tiff stacks. if there are phasemask
 % tiff files, they should correspond 1:1 with the nd2 files. the outputs
 % written to disk are a 2Dtracks.fig, fits.fig, _analysis.mat, and a binary
@@ -18,10 +18,10 @@ cParams.frameRate = 1/.04;
 paramsAn.checkVals = 0;
 paramsAn.phaseImages = 1;
 paramsAn.okWithPhase = 1;
-paramsAn.fittingBool = 1;
+paramsAn.fittingBool = 0;
 paramsAn.trackingBool = 1;
 paramsAn.makeXls = 0;
-paramsAn.viewFits = 0; % 'all';
+paramsAn.viewFits = 'all'; % 'all';
 
 paramsAn.bgsub = 0;
 paramsAn.bgsubWidth = 50;
@@ -41,17 +41,17 @@ fieldsPhase = fieldnames(paramsPhase);
 
 % PEAK GUESSING PARAMETERS,
 paramsPeaks.spotSizeLB = 1.2;
-paramsPeaks.spotSizeUB = 10;
-paramsPeaks.intThresh = 300;
+paramsPeaks.spotSizeUB = 100;
+paramsPeaks.intThresh = 100;
 paramsPeaks.hMax = 200;
 paramsPeaks.lZero = 10;
 fieldsPeaks = fieldnames(paramsPeaks);
 
 % TRACKING PARAMETERS
-paramsTr.minMerit = .9;
+paramsTr.minMerit = .1;
 paramsTr.intTime = 1/cParams.frameRate;
 paramsTr.gamma = .25;
-paramsTr.minTrLength = 5;
+paramsTr.minTrLength =3;
 paramsTr.maxStepSize = 10;
 paramsTr.swh = 1;
 paramsTr.delay = 0;
@@ -106,7 +106,7 @@ if paramsAn.phaseImages
     [plocs,pnames,pexts]=cellfun(@fileparts,phaselist,'uniformoutput',false);
     
     for ii=1:numel(pnames)
-        m=matfile([fullfile(plocs{ii},pnames{ii}),'_analysis.mat'],'Writable',true);
+        m=matfile([fullfile(dlocs{ii},dnames{ii}),'_analysis.mat'],'Writable',true);
         
         if strcmp(pexts{ii},'.nd2')
             vidid = bfGetReader(phaselist{ii});
@@ -235,10 +235,8 @@ for movieNum = 1:numel(dnames)
         fprintf(['Fitting this movie: ',dnames{movieNum},'\n'])
         
         % a small multicellular organism is initialized
-        p = cell(1,nFrames); ers = p; guesses = p; 
-        p(:) = {nan(1,5)}; ers(:) = {nan(1,5)}; guesses(:) = {nan(1,5)};
-        outPut = p; p1 = p;
-        p2 = p; p3 = p; o1 = p; g1 = p; allFitsCell = p; nFits = p;
+        p = cell(1,nFrames); p(:) = {nan(1,5)}; guesses = p;
+        outPut = p; allFitsCell = p; nFits = p;
         if paramsAn.checkVals
             currFrame = 1;
             
@@ -286,19 +284,18 @@ for movieNum = 1:numel(dnames)
             parfor currFrame = 1:nFrames
                 thisframe = double(binGetFrames2([movieName '.bin'],currFrame));
                 
-%                 [p{currFrame},ers{currFrame},guesses{currFrame},outPut{currFrame}] = ...
-%                     gaussFit(thisframe,...
-%                     'spotSizeLB',paramsPeaks.spotSizeLB,...
-%                     'spotSizeUB',paramsPeaks.spotSizeUB,...
-%                     'intThresh',paramsPeaks.intThresh,...
-%                     'hMax',paramsPeaks.hMax,...
-%                     'lZero',paramsPeaks.lZero,...
-%                     'checkVals',paramsAn.checkVals,...
-%                     'searchBool',1,...
-%                     'frameNumber',currFrame);
+                %                 [p{currFrame},ers{currFrame},guesses{currFrame},outPut{currFrame}] = ...
+                %                     gaussFit(thisframe,...
+                %                     'spotSizeLB',paramsPeaks.spotSizeLB,...
+                %                     'spotSizeUB',paramsPeaks.spotSizeUB,...
+                %                     'intThresh',paramsPeaks.intThresh,...
+                %                     'hMax',paramsPeaks.hMax,...
+                %                     'lZero',paramsPeaks.lZero,...
+                %                     'checkVals',paramsAn.checkVals,...
+                %                     'searchBool',1,...
+                %                     'frameNumber',currFrame);
                 
-                [p{currFrame},ers{currFrame},guesses{currFrame},outPut{currFrame}] = ...
-                    gaussFit(thisframe);
+                [p{currFrame},guesses{currFrame}] = gaussFit(thisframe);
             end
             display('done fitting')
             
@@ -306,6 +303,7 @@ for movieNum = 1:numel(dnames)
             pmID = cellfun(@(x)findPmID(phaseMask,vSize,x),p, 'uniformoutput',false);
             
             nFits = cellfun(@(x)size(x,1),p, 'uniformoutput',false);
+            ers = p;
             
             % reorganized outputs
             allFitsCell = cellfun(orgFun,...
@@ -322,7 +320,7 @@ for movieNum = 1:numel(dnames)
             % WRITE ANALYSIS FILE
             m.goodFits = goodFits;
             m.allFits = allFits;
-            m.outPut = outPut;
+            %             m.outPut = outPut;
         end
         
         m.paramsPeaks = paramsPeaks;
@@ -422,7 +420,7 @@ for movieNum = 1:numel(dnames)
     % Output ViewFit Files for the Current Movie (If Selected)
     if any(ismember(paramsAn.viewFits,movieNum))||ischar(paramsAn.viewFits)
         % Output ViewFits frames if the fit file is not empty
-        display(['Generating ViewFits movie for ''', movieName ,'''...'])
+        display(['Writing ViewFits movie for ''', movieName ,'''...'])
         
         if paramsAn.phaseImages
             bounds = [find(any(phaseMask,2),1,'first'),find(any(phaseMask,2),1,'last'),...
@@ -522,11 +520,11 @@ for ii = 1:nframes
             trY(jj),trX(jj),halfBoxWidth,sz);
     end
     
-%     imshow(img)
-%     v=getframe(gca);
-%     imwrite(currentframe2, [vidloc(1:end-4),'_Viewfits.tif'], 'writemode', 'append');
+    %     imshow(img)
+    %     v=getframe(gca);
+    %     imwrite(currentframe2, [vidloc(1:end-4),'_Viewfits.tif'], 'writemode', 'append');
     writeVideo(wobj,img)
-%     writeVideo(wobj,v);
+    %     writeVideo(wobj,v);
 end
 % close(wobj);
 end

@@ -1,4 +1,4 @@
-function [cpdFun,msdFun,pStart,bounds,dID]=cpdFunFinder(anProp)
+function outStruct = cpdFunFinder(anProp)
 
 dim = anProp.dim;
 nDiffs = anProp.nMobile;
@@ -18,17 +18,18 @@ m2=@(t,p)4*p(1)*t+p(2);
 % 1d unconfined msd function
 m1=@(t,p)2*p(1)*t+p(2);
 
-pStart = [.01, .5, .1, ...           % msd 1 parameters D1, L, S1
-    .001, .1, ...               % msd 2 parameters D2, S2
-    .0001, .1, ...               % msd 3 parameters D3, S3
-    2/3, .3, .25, .1];          % cpd function parameters amp1, amp2, amp3, immSize
+pStart = [.1, .5, .01, ...       % msd 1 parameters D1, L, S1
+    .001, .01, ...                % msd 2 parameters D2, S2
+    .001, .01, ...               % msd 3 parameters D3, S3
+    .8, .1, .25, .01];           % cpd function parameters amp1, amp2, amp3, immSize
 
 switch globBool
     case 1
         %% global fitting
         LB=zeros(1,numel(pStart));
-        LB([3,5])=-inf;
+%         LB([3,5,7])=-inf;
         UB=inf(1,numel(pStart));
+        UB([8:10]) = 1;
         switch dim
             case 2
                 switch immBool
@@ -299,8 +300,10 @@ switch globBool
         pStart={pStart(pID)};
         bounds=[{LB(pID)},{UB(pID)}];
         dID = find(ismember(pID,[1,4,6]));
+        aID = find(ismember(pID,8:10));
     case 0
         %% local fitting
+        dID = 1;
         switch confBool
             case 0 % conf
                 msdStart = pStart([1,3]);
@@ -315,27 +318,24 @@ switch globBool
                                     case 1
                                         cpdFun=@(x,p)1-...
                                             c1(x,p(1),1);
-                                        cpdStart = nan;
+                                        cpdStart = pStart(1);
                                         cpdLB = 0;
                                         cpdUB = inf;
-                                        dID = 1;
                                     case 2
                                         cpdFun=@(x,p)1-...
                                             c1(x,p(1),p(3))-...
                                             c1(x,p(2),1-p(3));
-                                        cpdStart = [nan, nan, .5];
+                                        cpdStart = [pStart([1,4]), .5];
                                         cpdLB = [0, 0, 0];
                                         cpdUB = [inf, inf, 1];
-                                        dID = [1,3];
                                     case 3
                                         cpdFun=@(x,p)1-...
                                             c1(x,p(1),p(4))-...
                                             c1(x,p(2),p(5))-...
                                             c1(x,p(3),1-p(4)-p(5));
-                                        cpdStart = [nan, nan, nan, .3, .3];
+                                        cpdStart = [pStart([1,4,6]), .3, .3];
                                         cpdLB = [0, 0, 0, 0, 0];
                                         cpdUB = [inf, inf, inf, 1, 1];
-                                        dID = [1,3,5];
                                 end
                             case 1 % immPop
                                 switch nDiffs
@@ -343,29 +343,26 @@ switch globBool
                                         cpdFun=@(x,p)1-...
                                             c1(x,p(1)+p(2),p(3))-...
                                             c1(x,p(2),1-p(3));
-                                        cpdStart = [nan, pStart(8), .5];
+                                        cpdStart = [pStart(1), pStart(8), .5];
                                         cpdLB = [0, 0, 0];
                                         cpdUB = [inf, inf, 1];
-                                        dID = 1;
                                     case 2
                                         cpdFun=@(x,p)1-...
                                             c1(x,p(1)+p(3),p(4))-...
                                             c1(x,p(2)+p(3),p(5))-...
                                             c1(x,p(3),1-p(4)-p(5));
-                                        cpdStart = [nan, nan, pStart(8), .3, .3];
+                                        cpdStart = [pStart([1,4]), pStart(8), .3, .3];
                                         cpdLB = [0, 0, 0, 0, 0];
                                         cpdUB = [inf, inf, inf, 1, 1];
-                                        dID = [1,3];
                                     case 3
                                         cpdFun=@(x,p)1-...
                                             c1(x,p(1)+p(4),p(5))-...
                                             c1(x,p(2)+p(4),p(6))-...
                                             c1(x,p(3)+p(4),p(7))-...
                                             c1(x,p(4),1-p(5)-p(6)-p(7));
-                                        cpdStart = [nan, nan, nan, pStart(8), .25, .25, .25];
+                                        cpdStart = [pStart([1,4,6]), pStart(8), .25, .25, .25];
                                         cpdLB = [0, 0, 0, 0, 0, 0, 0];
                                         cpdUB = [inf, inf, inf, inf, 1, 1, 1];
-                                        dID = [1,3,5];
                                 end
                         end
                     case 2 % dim
@@ -376,27 +373,24 @@ switch globBool
                                     case 1
                                         cpdFun=@(x,p)1-...
                                             c2(x,p(1),1);
-                                        cpdStart = nan;
+                                        cpdStart = pStart(1);
                                         cpdLB = 0;
                                         cpdUB = inf;
-                                        dID = 1;
                                     case 2
                                         cpdFun=@(x,p)1-...
                                             c2(x,p(1),p(3))-...
                                             c2(x,p(2),1-p(3));
-                                        cpdStart = [nan, nan, .5];
+                                        cpdStart = [pStart([1,4]), .5];
                                         cpdLB = [0, 0, 0];
                                         cpdUB = [inf, inf, 1];
-                                        dID = [1,3];
                                     case 3
                                         cpdFun=@(x,p)1-...
                                             c2(x,p(1),p(4))-...
                                             c2(x,p(2),p(5))-...
                                             c2(x,p(3),1-p(4)-p(5));
-                                        cpdStart = [nan, nan, nan, .3, .3];
+                                        cpdStart = [pStart([1,4,6]), .3, .3];
                                         cpdLB = [0, 0, 0, 0, 0];
                                         cpdUB = [inf, inf, inf, 1, 1];
-                                        dID = [1,3,5];
                                 end
                             case 1 % immPop
                                 switch nDiffs
@@ -404,29 +398,26 @@ switch globBool
                                         cpdFun=@(x,p)1-...
                                             c2(x,p(1)+p(2),p(3))-...
                                             c2(x,p(2),1-p(3));
-                                        cpdStart = [nan, pStart(8), .5];
+                                        cpdStart = [pStart(1), pStart(8), .5];
                                         cpdLB = [0, 0, 0];
                                         cpdUB = [inf, inf, 1];
-                                        dID = 1;
                                     case 2
                                         cpdFun=@(x,p)1-...
                                             c2(x,p(1)+p(3),p(4))-...
                                             c2(x,p(2)+p(3),p(5))-...
                                             c2(x,p(3),1-p(4)-p(5));
-                                        cpdStart = [nan, nan, pStart(8), .3, .3];
+                                        cpdStart = [pStart([1,4]), pStart(8), .3, .3];
                                         cpdLB = [0, 0, 0, 0, 0];
                                         cpdUB = [inf, inf, inf, 1, 1];
-                                        dID = [1,3];
                                     case 3
                                         cpdFun=@(x,p)1-...
                                             c2(x,p(1)+p(4),p(5))-...
                                             c2(x,p(2)+p(4),p(6))-...
                                             c2(x,p(3)+p(4),p(7))-...
                                             c2(x,p(4),1-p(5)-p(6)-p(7));
-                                        cpdStart = [nan, nan, nan, pStart(8), .25, .25, .25];
+                                        cpdStart = [pStart([1,4,6]), pStart(8), .25, .25, .25];
                                         cpdLB = [0, 0, 0, 0, 0, 0, 0];
                                         cpdUB = [inf, inf, inf, inf, 1, 1, 1];
-                                        dID = [1,3,5];
                                 end
                         end
                 end
@@ -443,27 +434,24 @@ switch globBool
                                     case 1
                                         cpdFun=@(x,p)1-...
                                             c1(x,p(1),1);
-                                        cpdStart = nan;
+                                        cpdStart = pStart(1);
                                         cpdLB = 0;
                                         cpdUB = inf;
-                                        dID = 1;
                                     case 2
                                         cpdFun=@(x,p)1-...
                                             c1(x,p(1),p(3))-...
                                             c1(x,p(2),1-p(3));
-                                        cpdStart = [nan, nan, .5];
+                                        cpdStart = [pStart([1,4]), .5];
                                         cpdLB = [0, 0, 0];
                                         cpdUB = [inf, inf, 1];
-                                        dID = [1,3];
                                     case 3
                                         cpdFun=@(x,p)1-...
                                             c1(x,p(1),p(4))-...
                                             c1(x,p(2),p(5))-...
                                             c1(x,p(3),1-p(4)-p(5));
-                                        cpdStart = [nan, nan, nan, .3, .3];
+                                        cpdStart = [pStart([1,4,6]), .3, .3];
                                         cpdLB = [0, 0, 0, 0, 0];
                                         cpdUB = [inf, inf, inf, 1, 1];
-                                        dID = [1,3,5];
                                 end
                             case 1 % immPop
                                 switch nDiffs
@@ -471,29 +459,26 @@ switch globBool
                                         cpdFun=@(x,p)1-...
                                             c1(x,p(1)+p(2),p(3))-...
                                             c1(x,p(2),1-p(3));
-                                        cpdStart = [nan, pStart(8), .5];
+                                        cpdStart = [pStart(1), pStart(8), .5];
                                         cpdLB = [0, 0, 0];
                                         cpdUB = [inf, inf, 1];
-                                        dID = 1;
                                     case 2
                                         cpdFun=@(x,p)1-...
                                             c1(x,p(1)+p(3),p(4))-...
                                             c1(x,p(2)+p(3),p(5))-...
                                             c1(x,p(3),1-p(4)-p(5));
-                                        cpdStart = [nan, nan, pStart(8), .3, .3];
+                                        cpdStart = [pStart([1,4]), pStart(8), .3, .3];
                                         cpdLB = [0, 0, 0, 0, 0];
                                         cpdUB = [inf, inf, inf, 1, 1];
-                                        dID = [1,3];
                                     case 3
                                         cpdFun=@(x,p)1-...
                                             c1(x,p(1)+p(4),p(5))-...
                                             c1(x,p(2)+p(4),p(6))-...
                                             c1(x,p(3)+p(4),p(7))-...
                                             c1(x,p(4),1-p(5)-p(6)-p(7));
-                                        cpdStart = [nan, nan, nan, pStart(8), .25, .25, .25];
+                                        cpdStart = [pStart([1,4,6]), pStart(8), .25, .25, .25];
                                         cpdLB = [0, 0, 0, 0, 0, 0, 0];
                                         cpdUB = [inf, inf, inf, inf, 1, 1, 1];
-                                        dID = [1,3,5];
                                 end
                         end
                     case 2 % dim
@@ -504,27 +489,24 @@ switch globBool
                                     case 1
                                         cpdFun=@(x,p)1-...
                                             c2(x,p(1),1);
-                                        cpdStart = nan;
+                                        cpdStart = pStart(1);
                                         cpdLB = 0;
                                         cpdUB = inf;
-                                        dID = 1;
                                     case 2
                                         cpdFun=@(x,p)1-...
                                             c2(x,p(1),p(3))-...
                                             c2(x,p(2),1-p(3));
-                                        cpdStart = [nan, nan, .5];
+                                        cpdStart = [pStart([1,4]), .5];
                                         cpdLB = [0, 0, 0];
                                         cpdUB = [inf, inf, 1];
-                                        dID = [1,3];
                                     case 3
                                         cpdFun=@(x,p)1-...
                                             c2(x,p(1),p(4))-...
                                             c2(x,p(2),p(5))-...
                                             c2(x,p(3),1-p(4)-p(5));
-                                        cpdStart = [nan, nan, nan, .3, .3];
+                                        cpdStart = [pStart([1,4,6]), .3, .3];
                                         cpdLB = [0, 0, 0, 0, 0];
                                         cpdUB = [inf, inf, inf, 1, 1];
-                                        dID = [1,3,5];
                                 end
                             case 1 % immPop
                                 switch nDiffs
@@ -532,39 +514,45 @@ switch globBool
                                         cpdFun=@(x,p)1-...
                                             c2(x,p(1)+p(2),p(3))-...
                                             c2(x,p(2),1-p(3));
-                                        cpdStart = [nan, pStart(8), .5];
+                                        cpdStart = [pStart(1), pStart(8), .5];
                                         cpdLB = [0, 0, 0];
                                         cpdUB = [inf, inf, 1];
-                                        dID = 1;
                                     case 2
                                         cpdFun=@(x,p)1-...
                                             c2(x,p(1)+p(3),p(4))-...
                                             c2(x,p(2)+p(3),p(5))-...
                                             c2(x,p(3),1-p(4)-p(5));
-                                        cpdStart = [nan, nan, pStart(8), .3, .3];
+                                        cpdStart = [pStart([1,4]), pStart(8), .3, .3];
                                         cpdLB = [0, 0, 0, 0, 0];
                                         cpdUB = [inf, inf, inf, 1, 1];
-                                        dID = [1,3];
                                     case 3
                                         cpdFun=@(x,p)1-...
                                             c2(x,p(1)+p(4),p(5))-...
                                             c2(x,p(2)+p(4),p(6))-...
                                             c2(x,p(3)+p(4),p(7))-...
                                             c2(x,p(4),1-p(5)-p(6)-p(7));
-                                        cpdStart = [nan, nan, nan, pStart(8), .25, .25, .25];
+                                        cpdStart = [pStart([1,4,6]), pStart(8), .25, .25, .25];
                                         cpdLB = [0, 0, 0, 0, 0, 0, 0];
                                         cpdUB = [inf, inf, inf, inf, 1, 1, 1];
-                                        dID = [1,3,5];
                                 end
                         end
                 end
         end
         pStart=[{cpdStart},{msdStart}];
         bounds=[{cpdLB},{cpdUB},{msdLB},{msdUB}];
-end
+        aID = nDiffs+immBool+1:numel(cpdStart)-immBool;
+        aID(aID == 0) = [];
 end
 
-%% square confinement model
+outStruct.cpdFun = cpdFun;
+outStruct.msdFun = msdFun;
+outStruct.pStart = pStart;
+outStruct.bounds = bounds;
+outStruct.dID = dID;
+outStruct.aID = aID;
+end
+
+%% 2d square confinement model
 function z=confMSD2(tau,p)
 % global camerasd
 d=p(1); l=p(2);
@@ -582,7 +570,7 @@ end
 z=l^2/3*(1-96/pi^4*temp)+p(3);
 end
 
-%% square confinement model
+%% 1d square confinement model
 function z=confMSD1(tau,p)
 % global camerasd
 d=p(1); l=p(2);

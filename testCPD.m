@@ -34,15 +34,15 @@ if ~isstruct(dType)
     mpp=.049;
     
     % number of total steps taken
-    nSteps=1e3;
+    nSteps=1e4;
     
     % diffusion coefficients in microns^2/s
     d1=.1;
-    d2=.001;
+    d2=.01;
     
     % fraction of total steps taken by each diffusing population
-    d1Frac=2/3;
-    d2Frac=1/3;
+    d1Frac=.8;
+    d2Frac=.1;
     
     % confinement lengths in each dimension in microns
     cLength1=.5;

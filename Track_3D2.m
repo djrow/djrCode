@@ -353,7 +353,7 @@ if enough_goodfits==1
         track_data((cum_tr_length(ii)+1):cum_tr_length(ii+1),1)=...
             track_data(cum_tr_length(ii+1));
     end
-
+    
     track_data(:,2)=fitfile1(track_row,1);                      % Frame #
     track_data(:,3)=(track_data(:,2)-1).*(itgtime+timedelay)*0.001; % Time(s)
     track_data(:,4)=fitfile1(track_row,3);                      % x-position(px)

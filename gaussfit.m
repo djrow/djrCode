@@ -1,4 +1,4 @@
-function [fitPars, conf95, guesses, outPut]=gaussFit(img, varargin)
+function [fitPars, guesses]=gaussFit(img, varargin)
 %
 % NAME:
 %       gaussFit
@@ -102,6 +102,7 @@ switch params.ffSwitch
         yR=@(x,y,xc,yc,th)(x-xc)*sin(th)+(y-yc)*cos(th);
         fFun=@(p,X) exp( -xR(X(:,1), X(:,2), p(1), p(2), p(3)).^2/2/p(4)^2 + ...
             -yR( X(:,1), X(:,2), p(1), p(2), p(3)).^2/2/p(5)^2 ) *p(6) + p(7);
+        
         pStart = [];
         lb = [];
         ub = [];
@@ -180,44 +181,43 @@ nFits = size(guesses,1);
 if nFits > 50
     warning(['way too many fits in frame number ' num2str(params.frameNumber)])
     fitPars = nan(1,5);
-    conf95 = nan(1,5);
+%     conf95 = nan(1,5);
     guesses = nan(1,2);
-    outPut.firstorderopt = [];
-    outPut.iterations = [];
-    outPut.funcCount = [];
-    outPut.cgiterations = [];
-    outPut.algorithm = [];
-    outPut.stepsize = [];
-    outPut.message = [];
+%     outPut.firstorderopt = [];
+%     outPut.iterations = [];
+%     outPut.funcCount = [];
+%     outPut.cgiterations = [];
+%     outPut.algorithm = [];
+%     outPut.stepsize = [];
+%     outPut.message = [];
     return
 elseif nFits > 0
     fitPars = nan(nFits,numel(lb));
-    conf95 = nan(nFits,numel(lb));
-    
-    outPut(nFits).firstorderopt = [];
-    outPut(nFits).iterations = [];
-    outPut(nFits).funcCount = [];
-    outPut(nFits).cgiterations = [];
-    outPut(nFits).algorithm = [];
-    outPut(nFits).stepsize = [];
-    outPut(nFits).message = [];
+%     conf95 = nan(nFits,numel(lb));
+%     outPut(nFits).firstorderopt = [];
+%     outPut(nFits).iterations = [];
+%     outPut(nFits).funcCount = [];
+%     outPut(nFits).cgiterations = [];
+%     outPut(nFits).algorithm = [];
+%     outPut(nFits).stepsize = [];
+%     outPut(nFits).message = [];
 else
     fitPars = nan(1,5);
-    conf95 = nan(1,5);
     guesses = nan(1,2);
-    outPut.firstorderopt = [];
-    outPut.iterations = [];
-    outPut.funcCount = [];
-    outPut.cgiterations = [];
-    outPut.algorithm = [];
-    outPut.stepsize = [];
-    outPut.message = [];
+%     conf95 = nan(1,5);
+%     outPut.firstorderopt = [];
+%     outPut.iterations = [];
+%     outPut.funcCount = [];
+%     outPut.cgiterations = [];
+%     outPut.algorithm = [];
+%     outPut.stepsize = [];
+%     outPut.message = [];
 end
 
 % pad the img(s) with nans (removed at end).
 padsize = params.nPixels(ones(1,2));
 img = padarray(img,padsize,nan,'both');
-guesses = guesses+params.nPixels;
+guesses = guesses + params.nPixels;
 
 %% fit the data
 % fitting domain
@@ -242,12 +242,11 @@ for ii = 1:nFits
 %     [fitPars(ii,:), ~, residual, ~, outPut(ii), ~, jacobian] = ...
 %         lsqcurvefit(fFun,pStart,X(~isnan(truImg(:)),:),truImg(~isnan(truImg(:))),lb,ub,opts);
     fitPars(ii,:) = lsqcurvefit(fFun,pStart,X(~isnan(truImg(:)),:),truImg(~isnan(truImg(:))),lb,ub,opts);
+
     % confidence intervals
 %     conf95(ii,:) = diff(nlparci(fitPars(ii,:), residual, 'jacobian', jacobian), 1, 2);
     
 end
-% disabled confidence intervals
-conf95 = fitPars;
 
 %% shift origins back to lab frame
 fitPars(:,[1,2]) = fitPars(:,1:2) + guesses - params.nPixels;
