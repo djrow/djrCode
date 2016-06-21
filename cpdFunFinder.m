@@ -18,16 +18,15 @@ m2=@(t,p)4*p(1)*t+p(2);
 % 1d unconfined msd function
 m1=@(t,p)2*p(1)*t+p(2);
 
-pStart = [.1, .5, .01, ...       % msd 1 parameters D1, L, S1
-    .001, .01, ...                % msd 2 parameters D2, S2
-    .001, .01, ...               % msd 3 parameters D3, S3
-    .8, .1, .25, .01];           % cpd function parameters amp1, amp2, amp3, immSize
+pStart = [.1, .5, .0016, ...       % msd 1 parameters D1, L, S1
+    .01, .0016, ...                % msd 2 parameters D2, S2
+    .001, .0016, ...               % msd 3 parameters D3, S3
+    .45, .45, .3, 0];            % cpd function parameters amp1, amp2, amp3, immSize
 
 switch globBool
     case 1
         %% global fitting
         LB=zeros(1,numel(pStart));
-%         LB([3,5,7])=-inf;
         UB=inf(1,numel(pStart));
         UB([8:10]) = 1;
         switch dim
@@ -83,7 +82,6 @@ switch globBool
                                             c2(x,y(2),p(8))-...
                                             c2(x,y(3),1-p(7)-p(8));
                                         pID=[1,3:7,8:9];
-                                        
                                     case 1 % 3 confined diffusers in 2D
                                         msdFun=@(tau,p)cat(2,...
                                             confMSD2(tau,p(1:3)),...
@@ -94,6 +92,24 @@ switch globBool
                                             c2(x,y(2),p(9))-...
                                             c2(x,y(3),1-p(8)-p(9));
                                         pID=[1:7,8:9];
+                                end
+                                
+                            case 4
+                                switch confBool
+                                    case 0
+                                        msdFun=@(tau,p)cat(2,...
+                                            m2(tau,p(1:2)),...
+                                            m2(tau,p(3:4)),...
+                                            m2(tau,p(5:6)),...
+                                            m2(tau,p(7:8)));
+                                        cpdFun=@(x,y,p)1-...
+                                            c2(x,y(1),p(9))-...
+                                            c2(x,y(2),p(10))-...
+                                            c2(x,y(3),p(11))-...
+                                            c2(x,y(4),1-p(9)-p(10)-p(11));
+%                                         pID=[1,3:7,,8:9];
+                                    case 1
+                                        
                                 end
                         end
                     case 1 % 1 immobile term
@@ -148,7 +164,7 @@ switch globBool
                                             c2(x,y(2)+p(10),p(8))-...
                                             c2(x,y(3)+p(10),p(9))-...
                                             c2(x,p(10),1-p(7)-p(8)-p(9));
-                                        pID=[1,3:5,8:11];
+                                        pID=[1,3:7,8:11];
                                     case 1 % 3 confined diffusers with 1 immobile population in 2D
                                         msdFun=@(tau,p)cat(2,...
                                             confMSD2(tau,p(1:3)),...
@@ -540,7 +556,7 @@ switch globBool
         end
         pStart=[{cpdStart},{msdStart}];
         bounds=[{cpdLB},{cpdUB},{msdLB},{msdUB}];
-        aID = nDiffs+immBool+1:numel(cpdStart)-immBool;
+        aID = nDiffs+immBool+1:numel(cpdStart);
         aID(aID == 0) = [];
 end
 

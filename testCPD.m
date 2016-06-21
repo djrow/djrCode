@@ -41,8 +41,8 @@ if ~isstruct(dType)
     d2=.01;
     
     % fraction of total steps taken by each diffusing population
-    d1Frac=.8;
-    d2Frac=.1;
+    d1Frac=.5;
+    d2Frac=.3;
     
     % confinement lengths in each dimension in microns
     cLength1=.5;

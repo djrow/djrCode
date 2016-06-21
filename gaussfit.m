@@ -150,7 +150,9 @@ if params.searchBool
     cc = bwconncomp(sIm);
     if cc.NumObjects < sum(sIm(:))
         whichBad = cellfun(@numel,cc.PixelIdxList) > 1;
-        sIm(cc.PixelIdxList{whichBad}) = 0;
+        for ii = find(whichBad~=0)
+            sIm(cc.PixelIdxList{whichBad(ii)}) = 0;
+        end
     end
     
     if params.checkVals

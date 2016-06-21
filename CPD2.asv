@@ -24,9 +24,6 @@ if ischar(mainfold)
         display('no data selected')
         return
     end
-    if ~iscell(datalist)
-        datalist = {datalist};
-    end
     
     tr=cell(1,numel(datalist)); tic
     for ii=1:numel(datalist)
@@ -41,7 +38,7 @@ else
 end
 
 %% Default analysis parameters
-anProp.nMobile = 3;     % number of diffusive populations
+anProp.nMobile = 4;     % number of diffusive populations
 anProp.immBool = 0;     % presence or absence of stationary population
 anProp.tFrame = .04;    % camera integration time in seconds
 anProp.pixSize = .049;  % pixel size in microns
@@ -55,7 +52,7 @@ anProp.plotBool = 1;    % plot output or not
 anProp.dim = 2;         % 1d or 2d diffusion analysis
 anProp.whichDim = 1;    % for 1d diffusion, which dimension to consider
 anProp.rotAngle = pi/3; % for 1d diffusion, clockwise angle to rotate the trajectory
-anProp.bootNum = 100;   % number of bootstraps
+anProp.bootNum = 1;     % number of bootstraps
 
 fNames=fieldnames(anProp);
 
@@ -283,4 +280,8 @@ else
     out.fP2_B = fP2_B;
     out.fP2_nB = fP2_nB;
 end
+% plot([r_nB,r_B])
+
+% figure
+% plot(cat(1,y{:}),r_nB)
 end

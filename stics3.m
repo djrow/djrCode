@@ -1,4 +1,4 @@
-function timecorr=stics3(imstack,mask,maxtau,whichfun)
+function timecorr=stics3(imstack,whichfun,maxtau,mask)
 % calculate the full space-time correlation of an image stack.
 % size(imstack)=[x, y, frame number]
 %
@@ -12,15 +12,15 @@ function timecorr=stics3(imstack,mask,maxtau,whichfun)
 vidsize=[size(imstack),1];
 
 if ~exist('whichfun','var')
-    whichfun=[];
+    whichfun = [];
 end
 
 if ~exist('maxtau','var')
-    maxtau=20;
+    maxtau = 3;
 end
 
-if isempty(mask)
-    mask=true(vidsize(1:2));
+if ~exist('mask','var')||isempty(mask)
+    mask = true(vidsize(1:2));
 end
 
 fun{2}=@(x,y)pixremfun(x,y);    % remove pixels outside mask
