@@ -5,7 +5,7 @@ function out = CPD2(mainfold,varargin)
 % this histograms the bootstrapped results for the second diffusion
 % coefficient (if it exists for the chosen fitting model):
 % hist(out.fittedParameters_B(:,out.dID(1)))
-% 
+%
 % dID and aID give the indices for the diffusion coefficeints
 % and population amplitudes in the fitted parameters vector.
 
@@ -186,7 +186,7 @@ if anProp.globBool
     
     % bootstrap
     fP_B = zeros(anProp.bootNum,numel(pStart{1}));
-%     r_B = zeros(nTotal,anProp.bootNum); 
+    %     r_B = zeros(nTotal,anProp.bootNum);
     parfor kk = 1:anProp.bootNum
         % converts track positions from pixels to microns and resamples at the same
         % time
@@ -217,7 +217,7 @@ elseif ~anProp.globBool
         [fP1_nB(:,mm),~,rTemp] = lsqcurvefit(@(p,x)cpdFun(x,p),...
             cpdStart(mm,:),y{mm},oRanks{mm},cpdLB,cpdUB,opts);
         r = cat(1,r,rTemp);
-    end; disp(fP1_nB'); fprintf('\n')
+    end
     r_nB = r;
     
     % fit the msd curves
@@ -226,42 +226,37 @@ elseif ~anProp.globBool
             msdStart,msdLB,msdUB,opts);
     end
     
-%     for ii = 1:anProp.maxTau
-%         for jj = 1:anProp.nMobile
-%             cpdStart(ii,jj) = mean(y{ii})/10^(jj-1);
-%         end
-%     end
-%     
-    fParams1a = zeros(numel(pStart{1}),anProp.maxTau,anProp.bootNum);
-    aOut = zeros(numel(aID),anProp.maxTau,anProp.bootNum);
-    resids = zeros(nTotal,anProp.bootNum);
+    %     for ii = 1:anProp.maxTau
+    %         for jj = 1:anProp.nMobile
+    %             cpdStart(ii,jj) = mean(y{ii})/10^(jj-1);
+    %         end
+    %     end
+    
+    fP2_B = zeros(anProp.bootNum,numel(msdStart),anProp.nMobile);
     parfor kk = 1:anProp.bootNum
-        fParams1 = zeros(numel(cpdStart(1,:)),anProp.maxTau);
-        fParams2 = zeros(numel(msdStart),anProp.nMobile);
-        
         y=cellfun(@(x,y)sort(x(randsample(y,y,1))*anProp.pixSize.^2),sqSteps,nSteps,...
             'uniformoutput',0);
         
         % fit the cpd curves to get the msd values
-        r = [];
+        fParams1 = zeros(numel(cpdStart(1,:)),anProp.maxTau);
         for mm = 1:anProp.maxTau
-            [fParams1(:,mm),~,rTemp] = lsqcurvefit(@(p,x)cpdFun(x,p),...
+            fParams1(:,mm) = lsqcurvefit(@(p,x)cpdFun(x,p),...
                 cpdStart(mm,:),y{mm},oRanks{mm},cpdLB,cpdUB,opts);
-            r = cat(1,r,rTemp);
         end
-        r_B(kk,:) = r;
         
         fP1_B(:,:,kk) = fParams1;
         
         % fit msds to get diffusion coefficients
+        temp = zeros(numel(msdStart),anProp.nMobile);
         for mm = 1 : anProp.nMobile
             % unweighted fit
             %         fParams2(:,mm)=lsqcurvefit(@(p,x)msdFun(x,p),msdStart,tau,fParams1(mm,:)',...
             %             msdLB,msdUB,opts);
             % weighted fit
-            fP2_B(:,mm) = lsqnonlin(@(p)(msdFun(tau,p)-fParams1(mm,:)') .* [nSteps{:}]'/nTotal,...
+            temp(:,mm) = lsqnonlin(@(p)(msdFun(tau,p)-fParams1(mm,:)') .* [nSteps{:}]'/nTotal,...
                 msdStart,msdLB,msdUB,opts);
         end
+        fP2_B(kk,:,:) = temp;
     end
     
     % calculate BIC
@@ -276,11 +271,11 @@ if anProp.globBool
     out.combinedResiduals_nB = r_nB;
     out.dID = dID;
     out.aID = aID;
-%     out.r_B = r_B;
 else
-    out.fP1_B = fP1_B;
-    out.fP1_nB = fP1_nB;
-    out.fP2_B = fP2_B;
-    out.fP2_nB = fP2_nB;
+    out.cpdParameters_B = fP1_B;
+    out.cpdParameters_nB = fP1_nB;
+    out.msdParameters_B = fP2_B;
+    out.msdParameters_nB = fP2_nB;
+    out.cpdResiduals_nB = r_nB;
 end
 end
