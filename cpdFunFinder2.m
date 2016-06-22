@@ -52,7 +52,7 @@ if dim == 2 && immBool == 0 && globBool == 1
                 cpdFun=@(x,y,p)1-...
                     c2(x,y(1),p(5))-...
                     c2(x,y(2),p(6))-...
-                    c2(x,y(2),1-p(5)-p(6));
+                    c2(x,y(3),1-p(5)-p(6));
                 pID = [1:3,5,9:10];
                 
             case 4
@@ -116,16 +116,41 @@ if dim == 2 && immBool == 0 && globBool == 1
     dID = find(ismember(pID,1:2:7));
     aID = find(ismember(pID,9:11));
     
-    outStruct.cpdFun = cpdFun;
-    outStruct.msdFun = msdFun;
-    outStruct.pStart = pStart;
-    outStruct.bounds = bounds;
-    outStruct.dID = dID;
-    outStruct.aID = aID;
+    
+elseif ~globBool && ~confBool
+    msdFun = @(tau,p)m2(tau,p);
+    msdStart = pStart([1,2]);
+    msdLB = [0,-inf];
+    msdUB = [inf,inf];
+    switch nDiffs
+        case 1
+            cpdFun = @(x,p)1-...
+                c2(x,p(1),1);
+            cpdStart = pStart(1);
+            cpdLB = 0;
+            cpdUB = inf;
+        case 2
+            cpdFun = @(x,p)1-...
+                c2(x,p(1),p(3))-...
+                c2(x,p(2),1-p(3));
+            cpdStart = pStart([1,3,9]);
+            cpdLB = [0,0,0];
+            cpdUB = [inf,inf,1];
+    end
+    pStart = [{cpdStart},{msdStart}];
+    bounds = [{cpdLB},{cpdUB},{msdLB},{msdUB}];
+    dID = nan;
+    aID = nan;
 else
     warning('unsupported parameters')
     outStruct = [];
 end
+outStruct.cpdFun = cpdFun;
+outStruct.msdFun = msdFun;
+outStruct.pStart = pStart;
+outStruct.bounds = bounds;
+outStruct.dID = dID;
+outStruct.aID = aID;
 end
 
 %% 2d square confinement model

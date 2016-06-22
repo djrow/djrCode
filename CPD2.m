@@ -41,7 +41,7 @@ else
 end
 
 %% Default analysis parameters
-anProp.nMobile = 3;     % number of diffusive populations
+anProp.nMobile = 4;     % number of diffusive populations
 anProp.immBool = 0;     % presence or absence of stationary population
 anProp.tFrame = .04;    % camera integration time in seconds
 anProp.pixSize = .049;  % pixel size in microns
@@ -213,7 +213,7 @@ elseif ~anProp.globBool
     % fit the cpds (original data)
     y = cellfun(@(x)x*anProp.pixSize.^2,sqSteps,'uniformoutput',0);
     r = [];
-    for mm=1:anProp.maxTau
+    for mm = 1:anProp.maxTau
         [fP1_nB(:,mm),~,rTemp] = lsqcurvefit(@(p,x)cpdFun(x,p),...
             cpdStart(mm,:),y{mm},oRanks{mm},cpdLB,cpdUB,opts);
         r = cat(1,r,rTemp);
@@ -226,18 +226,18 @@ elseif ~anProp.globBool
             msdStart,msdLB,msdUB,opts);
     end
     
-    for ii = 1:anProp.maxTau
-        for jj = 1:anProp.nMobile
-            cpdStart(ii,jj) = mean(y{ii})/10^(jj-1);
-        end
-    end
-    
-    %     fParams1a = zeros(numel(pStart{1}),anProp.maxTau,anProp.bootNum);
-    %     aOut = zeros(numel(aID),anProp.maxTau,anProp.bootNum);
-    %     resids = zeros(nTotal,anProp.bootNum);
-    for kk = 1:anProp.bootNum
-        %         fParams1 = zeros(numel(cpdStart(1,:)),anProp.maxTau);
-        %         fParams2 = zeros(numel(msdStart),anProp.nMobile);
+%     for ii = 1:anProp.maxTau
+%         for jj = 1:anProp.nMobile
+%             cpdStart(ii,jj) = mean(y{ii})/10^(jj-1);
+%         end
+%     end
+%     
+    fParams1a = zeros(numel(pStart{1}),anProp.maxTau,anProp.bootNum);
+    aOut = zeros(numel(aID),anProp.maxTau,anProp.bootNum);
+    resids = zeros(nTotal,anProp.bootNum);
+    parfor kk = 1:anProp.bootNum
+        fParams1 = zeros(numel(cpdStart(1,:)),anProp.maxTau);
+        fParams2 = zeros(numel(msdStart),anProp.nMobile);
         
         y=cellfun(@(x,y)sort(x(randsample(y,y,1))*anProp.pixSize.^2),sqSteps,nSteps,...
             'uniformoutput',0);
@@ -251,7 +251,7 @@ elseif ~anProp.globBool
         end
         r_B(kk,:) = r;
         
-        fP1_B(:,:,kk) = fParams1; disp(fP1_B')
+        fP1_B(:,:,kk) = fParams1;
         
         % fit msds to get diffusion coefficients
         for mm = 1 : anProp.nMobile
